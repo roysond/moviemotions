@@ -1,0 +1,30 @@
+{
+  "note": "Golden set for MovieMotions retrieval. The ANSWERS are human ground truth and are model-independent — they do not change when the model or the pipeline changes. Only the SCORE against them changes. 'expect' lists every film that genuinely satisfies the query within this 20-film corpus. An empty 'expect' is a deliberate no-answer case: it measures whether the system can be wrong quietly, since semantic search always returns something.",
+  "cases": [
+    {"id": 1,  "type": "situation", "query": "a movie where creatures chase and hunt people, very intense", "expect": ["Predator", "Alien", "Jurassic Park"]},
+    {"id": 2,  "type": "plot",      "query": "a man wrongly imprisoned who never gives up", "expect": ["The Shawshank Redemption"]},
+    {"id": 3,  "type": "situation", "query": "a father and son separated and trying to find each other", "expect": ["Finding Nemo"]},
+    {"id": 4,  "type": "situation", "query": "an underdog who trains hard to win a fight", "expect": ["Rocky", "The Karate Kid"]},
+    {"id": 5,  "type": "mood",      "query": "a cosy film about forgiveness", "expect": []},
+    {"id": 6,  "type": "situation", "query": "toys that secretly come alive when nobody is watching", "expect": ["Toy Story"]},
+    {"id": 7,  "type": "situation", "query": "a child left behind alone who defends the house from burglars", "expect": ["Home Alone"]},
+    {"id": 8,  "type": "situation", "query": "a ship sinks and two lovers are torn apart", "expect": ["Titanic"]},
+    {"id": 9,  "type": "situation", "query": "an orphan boy discovers he is a wizard and goes to a magic school", "expect": ["Harry Potter and the Philosopher's Stone"]},
+    {"id": 10, "type": "situation", "query": "people entering a dream inside another dream to plant an idea", "expect": ["Inception"]},
+    {"id": 11, "type": "situation", "query": "friends wake up with no memory of the night before and must retrace it", "expect": ["The Hangover"]},
+    {"id": 12, "type": "situation", "query": "a teenager gains powers after being bitten by a spider", "expect": ["Spider-Man"]},
+    {"id": 13, "type": "situation", "query": "a machine sent back in time to protect a boy from another machine", "expect": ["Terminator 2: Judgment Day"]},
+    {"id": 14, "type": "situation", "query": "a weekend visit to the girlfriend's family turns sinister", "expect": ["Get Out"]},
+    {"id": 15, "type": "situation", "query": "an alien creature loose on a spaceship killing the crew one by one", "expect": ["Alien"]},
+    {"id": 16, "type": "situation", "query": "an older mentor trains a bullied kid in martial arts", "expect": ["The Karate Kid"]},
+    {"id": 17, "type": "situation", "query": "fighters compete in a supernatural tournament to save their world", "expect": ["Mortal Kombat"]},
+    {"id": 18, "type": "plot",      "query": "a dying man protects a young girl who shares his abilities", "expect": ["Logan"]},
+    {"id": 19, "type": "situation", "query": "a man learns to date again after his wife asks for a divorce", "expect": ["Crazy, Stupid, Love."]},
+    {"id": 20, "type": "mood",      "query": "a dark story where the hero is pushed to compromise his principles", "expect": ["The Dark Knight", "Logan"]},
+    {"id": 21, "type": "mood",      "query": "something funny and light that will cheer me up", "expect": ["The Hangover", "Crazy, Stupid, Love.", "Home Alone", "Toy Story"]},
+    {"id": 22, "type": "mood",      "query": "a quiet film about ordinary family life with no danger in it", "expect": []},
+    {"id": 23, "type": "situation", "query": "dinosaurs escape their enclosures and hunt visitors in a park", "expect": ["Jurassic Park"]},
+    {"id": 24, "type": "situation", "query": "a soldier hunted in the jungle by an invisible alien hunter", "expect": ["Predator"]},
+    {"id": 25, "type": "no_answer", "query": "a documentary about climate change and rising sea levels", "expect": []}
+  ]
+}

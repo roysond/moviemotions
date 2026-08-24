@@ -1,0 +1,27 @@
+[
+    {
+      "query": "movie that has creatures chasing you and is very intense",
+      "expect_any_of": ["Predator", "Jurassic Park", "Alien"],
+      "note": "corpus definitely contains good answers"
+    },
+    {
+      "query": "a man wrongly imprisoned who never gives up",
+      "expect_any_of": ["The Shawshank Redemption"],
+      "note": "plot stated plainly in the overview"
+    },
+    {
+      "query": "a father and son separated and trying to find each other",
+      "expect_any_of": ["Finding Nemo"],
+      "note": "literal, should be easy"
+    },
+    {
+      "query": "an underdog who trains hard to win a fight",
+      "expect_any_of": ["Rocky", "The Karate Kid"],
+      "note": "two valid answers, both plot-level"
+    },
+    {
+      "query": "a cosy film about forgiveness",
+      "expect_any_of": [],
+      "note": "KNOWN GAP: no good answer exists in this corpus. Records the no-match blindness, not a pass/fail."
+    }
+  ]

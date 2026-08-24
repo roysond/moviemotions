@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — Concept Map</title>
+<style>
+  :root{
+    --ink:#1a2b33; --soft:#4d6470; --muted:#7f939c;
+    --paper:#f2f0eb; --card:#fff; --line:#ddd8cf;
+    --b1:#1f6f6b; --b1s:#e4f0ef;
+    --b2:#2f6591; --b2s:#e6eef5;
+    --b3:#a8501f; --b3s:#faeee5;
+    --b4:#6b4e91; --b4s:#efe9f6;
+    --b5:#8a6d18; --b5s:#f8f1de;
+    --b6:#2b6b3f; --b6s:#e5f1e9;
+    --b7:#96305a; --b7s:#f9e8ef;
+    --warn:#a8501f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.62 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:46px 24px 80px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:16px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--b3);font-weight:700}
+  h1{font-size:36px;line-height:1.14;margin:9px 0 8px;letter-spacing:-.02em}
+  .sub{font-size:17px;color:var(--soft);margin:0;max-width:62ch}
+  .count{display:flex;gap:26px;margin:26px 0 8px;flex-wrap:wrap}
+  .count div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px 20px;flex:1 1 160px}
+  .count b{display:block;font-size:29px;line-height:1.1;letter-spacing:-.02em}
+  .count span{font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+  h2{font-size:12.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);
+     margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:700}
+
+  .bucket{background:var(--card);border:1px solid var(--line);border-radius:12px;
+          padding:20px 22px;margin:14px 0;border-left:5px solid var(--bc,var(--b1))}
+  .bhead{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:4px}
+  .bnum{font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--bc);
+        background:var(--bs);border-radius:4px;padding:3px 8px}
+  .btitle{font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .bwhat{font-size:13.5px;color:var(--muted);font-style:italic}
+  .tree{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.85;
+        color:var(--soft);margin:12px 0 0;white-space:pre-wrap}
+  .tree b{color:var(--ink);font-weight:700}
+  .tree i{color:var(--bc);font-style:normal;font-weight:600}
+  .ref{color:var(--muted);font-size:11.5px}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th{text-align:left;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+     border-bottom:2px solid var(--line);padding:0 12px 9px 0;font-weight:700}
+  td{border-bottom:1px solid var(--line);padding:12px 12px 12px 0;vertical-align:top;line-height:1.55}
+  tr:last-child td{border-bottom:none}
+  td:last-child,th:last-child{padding-right:0}
+  .vs th:nth-child(2){color:var(--b3)} .vs th:nth-child(3){color:var(--b7)}
+  .vs td:first-child{font-weight:600;width:22%}
+
+  .callout{background:#fdf3e8;border:1px solid #eac9a4;border-left:4px solid var(--warn);
+           border-radius:0 10px 10px 0;padding:17px 21px;margin:18px 0;font-size:14.5px}
+  .callout b{color:var(--warn)}
+  .def{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:17px 20px;margin:12px 0}
+  .def h4{margin:0 0 6px;font-size:15.5px}
+  .def p{margin:0;font-size:14px;color:var(--soft)}
+  code{background:#eae6dd;border-radius:4px;padding:1.5px 5px;font-size:13px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .pass td:first-child{font-weight:700;width:14%;white-space:nowrap}
+  .miss li{margin-bottom:9px;font-size:14.5px}
+  .miss b{display:block}
+  .miss span{color:var(--soft);font-size:13.5px}
+  footer{margin-top:54px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  @media(max-width:640px){h1{font-size:27px}.tree{font-size:11.5px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · Concept Map</div>
+  <h1>Twenty-three items. Seven things.</h1>
+  <p class="sub">The list felt endless because it was flat — categories and their contents listed side by side. Here it is with the hierarchy put back.</p>
+</header>
+
+<div class="count">
+  <div><b>23</b><span>items as listed</span></div>
+  <div><b>7</b><span>actual buckets</span></div>
+  <div><b>4</b><span>passes to cover them</span></div>
+  <div><b>6</b><span>things missing</span></div>
+</div>
+
+<h2>The seven buckets</h2>
+
+<div class="bucket" style="--bc:var(--b1);--bs:var(--b1s)">
+  <div class="bhead"><span class="bnum">01</span><span class="btitle">Orchestration</span><span class="bwhat">how the LLM gets used</span></div>
+<div class="tree"><b>LLM orchestration</b> <i>← the category itself</i> <span class="ref">#2</span>
+ └─ <b>Agentic AI</b> <i>← a style of orchestration</i> <span class="ref">#3</span>
+     └─ <b>The loop</b> <i>← the mechanism that makes it agentic</i> <span class="ref">#4</span>
+         └─ tools · human-in-the-loop interrupts <span class="ref">#16</span>
+ ├─ <b>LangChain</b> <i>← library: the building blocks</i>
+ └─ <b>LangGraph</b> <i>← library: the loop</i></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b2);--bs:var(--b2s)">
+  <div class="bhead"><span class="bnum">02</span><span class="btitle">Retrieval</span><span class="bwhat">how it finds things</span></div>
+<div class="tree"><b>RAG</b> <i>← the pattern</i> <span class="ref">#5 #6</span>
+ ├─ chunking <i>← biggest quality lever, and you missed it</i>
+ ├─ embedding
+ ├─ storage in Postgres + pgvector <span class="ref">#11</span>
+ ├─ search — semantic, keyword, or hybrid
+ └─ reranking <i>← you missed this too</i></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b3);--bs:var(--b3s)">
+  <div class="bhead"><span class="bnum">03</span><span class="btitle">Measurement</span><span class="bwhat">is it any good</span></div>
+<div class="tree"><b>Evals</b> — offline · batch · on test data <span class="ref">#7</span>
+ ├─ <b>RAGAS</b> <i>← a metrics library evals call</i> <span class="ref">#8</span>
+ └─ <b>CI gate</b> <i>← where evals run automatically</i> <span class="ref">#19</span>
+
+<b>Validation &amp; guardrails</b> — online · per-request · real traffic <span class="ref">#15 #17</span></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b4);--bs:var(--b4s)">
+  <div class="bhead"><span class="bnum">04</span><span class="btitle">Observability</span><span class="bwhat">what did it actually do</span></div>
+<div class="tree"><b>LangSmith</b> — traces · cost · latency · token counts
+ └─ also stores eval datasets and run history <i>← which is why it feels tangled with bucket 3</i></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b5);--bs:var(--b5s)">
+  <div class="bhead"><span class="bnum">05</span><span class="btitle">Operations — “LLMOps”</span><span class="bwhat">keeping it shippable</span></div>
+<div class="tree"><b>LLMOps</b> <i>← not a separate skill. The name for 3 + 4 together, plus:</i> <span class="ref">#21</span>
+ ├─ prompt versioning in Git
+ ├─ GitHub Actions <i>← the tool that runs CI</i> <span class="ref">#22</span>
+ └─ deployment — containers, cloud, managed inference <span class="ref">#18 #9</span></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b6);--bs:var(--b6s)">
+  <div class="bhead"><span class="bnum">06</span><span class="btitle">Data</span><span class="bwhat">what goes in</span></div>
+<div class="tree"><b>Sourcing · curation · provenance</b> <span class="ref">#20</span>
+ ├─ Kafka <i>← transport. Moves events.</i>
+ └─ Databricks + Genie <i>← platform. Profiles and curates.</i>
+
+<b>Governance</b> <i>← policy. Not a stage — a property of every stage.</i> <span class="ref">#23</span>
+<b>Semantic layer</b> <i>← one agreed home for business definitions</i> <span class="ref">#13</span></div>
+</div>
+
+<div class="bucket" style="--bc:var(--b7);--bs:var(--b7s)">
+  <div class="bhead"><span class="bnum">07</span><span class="btitle">Integration</span><span class="bwhat">reaching the outside world</span></div>
+<div class="tree"><b>HTTP calls</b> to weather, showtimes, streaming <i>← ordinary requests</i>
+<b>MCP</b> <i>← a different thing entirely. See below.</i> <span class="ref">#12</span></div>
+</div>
+
+<h2>Evals vs. validation — the untangle that matters most</h2>
+<table class="vs">
+  <thead><tr><th></th><th>Evals</th><th>Validation &amp; guardrails</th></tr></thead>
+  <tbody>
+    <tr><td>When</td><td>Offline, deliberately, in batches</td><td>Online, on every single request</td></tr>
+    <tr><td>Against what</td><td>A fixed test set with known-good answers</td><td>Real traffic, no known answer</td></tr>
+    <tr><td>Asks</td><td>“Did my change make the system better or worse?”</td><td>“Is <em>this one response</em> safe to send?”</td></tr>
+    <tr><td>Blocks</td><td>A merge</td><td>A response reaching the user</td></tr>
+    <tr><td>Tools</td><td>RAGAS for scores · LangSmith for history · GitHub Actions to run it</td><td>Schema checks · grounding checks · content safety · least-privilege tool access</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14.5px;color:var(--soft)">They sound alike and are completely different jobs. Evals ask whether the <em>system</em> is good. Validation asks whether <em>this output</em> is acceptable, right now.</p>
+
+<h2>Where a RAGAS report actually goes</h2>
+<table>
+  <tbody>
+    <tr><td style="width:32%;font-weight:600">A comment on the pull request</td><td>“faithfulness 0.87 → 0.91, context recall 0.72 → 0.69 ⚠️ regression.” This is the one that matters day to day.</td></tr>
+    <tr><td style="font-weight:600">A tracking platform</td><td>Full run history, so trends across months are visible. LangSmith or equivalent.</td></tr>
+    <tr><td style="font-weight:600">A generated HTML report</td><td>Saved as a build artifact for anyone wanting detail.</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14.5px;color:var(--soft)">Nobody emails a PDF. It lives in the pull request and the dashboard.</p>
+
+<h2>Three definitions worth getting exactly right</h2>
+
+<div class="def">
+  <h4>Semantic search ≠ semantic layer</h4>
+  <p><b>Semantic search</b> finds things by meaning rather than exact words — “a man stranded on Mars” finds the right film even if the synopsis never says “stranded.” A retrieval technique.<br><br>
+  <b>Semantic layer</b> is one agreed place where business terms are defined. In this app: <code>nearby</code> = within 20 miles of the user's ZIP. <code>available tonight</code> = a showing in the next 3 days, or streaming on a service they have. <code>new release</code> = theatrical within 45 days. Defined once — otherwise “new release” quietly means 30 days in one function and 90 in another.</p>
+</div>
+
+<div class="def">
+  <h4>Guardrails live at three points, not in one file</h4>
+  <p><b>Input</b> — before the model sees the text: injection detection, PII scrubbing, off-topic rejection.<br>
+  <b>Tool</b> — what the agent may call, with what arguments, how often. Least privilege.<br>
+  <b>Output</b> — before the user sees it: grounding check, schema validation, content safety.<br><br>
+  They apply to plain LLM calls and agentic loops alike — but tool guardrails only exist when there are tools, so agentic systems need strictly more.</p>
+</div>
+
+<div class="def">
+  <h4>LLMOps vs. MLOps</h4>
+  <p><b>MLOps</b> is the parent discipline: shipping, monitoring, and retraining models. <b>LLMOps</b> is that adapted to LLMs, where retraining is mostly replaced by prompt versioning, eval gates, and managing cost and latency — because usually you aren't training the model at all.</p>
+</div>
+
+<div class="callout">
+  <b>Correction — MCP is not how you call the weather API.</b><br><br>
+  Calling a weather API is an ordinary HTTP request; no protocol required. MCP is a standard for <em>exposing your own tools to AI clients</em> — you'd use it so that something like Claude Desktop could search your movie corpus. It points <b>outward from your system</b>, not inward toward external services. Worth knowing precisely, because an interviewer will hear the difference immediately.
+</div>
+
+<h2>Six things missing from the list</h2>
+<ul class="miss">
+  <li><b>Chunking strategy</b><span>How text is split before embedding. The single largest lever on retrieval quality, and very few people can explain it.</span></li>
+  <li><b>Reranking</b><span>A second pass that reorders retrieved results. Most of the distance between a demo and production.</span></li>
+  <li><b>Structured output</b><span>Forcing a model to return reliable JSON every time. Constant, practical, unglamorous.</span></li>
+  <li><b>Caching</b><span>The largest cost lever available.</span></li>
+  <li><b>Cost and latency as design constraints</b><span>Precisely what a Solutions Architect is hired to own.</span></li>
+  <li><b>Secrets management</b><span>API keys are arriving. Where they live, and how they never reach GitHub.</span></li>
+</ul>
+
+<h2>Which pass covers which bucket</h2>
+<table class="pass">
+  <thead><tr><th>Pass</th><th>Buckets touched</th></tr></thead>
+  <tbody>
+    <tr><td>Pass 0</td><td>2 (crudely) · 7 (one API) — everything else exists as a stub or a print statement</td></tr>
+    <tr><td>Pass 1</td><td>1 · 2 at depth · 3 · 4 · start of 5</td></tr>
+    <tr><td>Pass 2</td><td>5 · 6 · 7 at depth · guardrails and governance throughout</td></tr>
+    <tr><td>Pass 3+</td><td>Managed cloud inference · Kubernetes · caching · multi-tenancy · MCP · one at a time</td></tr>
+  </tbody>
+</table>
+
+<footer>MovieMotions concept map · 14 August 2026 · Seven buckets, four passes, first pass deliberately shallow.</footer>
+
+</div>
+</body>
+</html>

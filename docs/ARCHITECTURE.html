@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — System Architecture</title>
+<style>
+  :root{
+    --ink:#16242b; --soft:#4a626d; --muted:#7d919b;
+    --paper:#f1efea; --card:#fff; --line:#dcd6cc;
+    --p0:#1a6f68; --p0s:#e3efee;
+    --p1:#2c5f8f; --p1s:#e5edf4;
+    --p2:#a35a18; --p2s:#f9efe3;
+    --p3:#6a4a8c; --p3s:#eee8f5;
+    --cross:#8a2f52; --crosss:#f9e7ee;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:44px 22px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:26px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--p2);font-weight:700}
+  h1{font-size:36px;line-height:1.13;margin:9px 0 8px;letter-spacing:-.022em}
+  .sub{font-size:17px;color:var(--soft);margin:0;max-width:66ch}
+
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0 34px}
+  .lg{display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);
+      border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;color:var(--soft)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  h2{font-size:12.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);
+     margin:44px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:700}
+
+  .stage{background:var(--card);border:1px solid var(--line);border-radius:13px;
+         padding:19px 22px;position:relative;border-left:5px solid var(--ac)}
+  .flow{display:flex;flex-direction:column;gap:0}
+  .conn{height:26px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px}
+
+  .shead{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:3px}
+  .snum{font-size:10.5px;font-weight:800;letter-spacing:.1em;color:#fff;background:var(--ac);
+        border-radius:5px;padding:4px 9px}
+  .stitle{font-size:19px;font-weight:700;letter-spacing:-.012em}
+  .sdesc{font-size:13.5px;color:var(--muted);font-style:italic;margin:0 0 13px}
+
+  .row{display:grid;grid-template-columns:78px 1fr;gap:12px;margin:9px 0;align-items:start}
+  .rlab{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+        font-weight:700;padding-top:6px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:12.5px;font-weight:600;border-radius:6px;padding:4px 10px;
+        background:#f0ede7;color:var(--soft);border:1px solid #e3ded5}
+  .chip.tool{background:var(--acs);color:var(--ac);border-color:transparent}
+  .chip.p0::after,.chip.p1::after,.chip.p2::after,.chip.p3::after{
+        font-size:9px;font-weight:800;margin-left:6px;opacity:.85}
+  .chip.p0::after{content:"P0"} .chip.p1::after{content:"P1"}
+  .chip.p2::after{content:"P2"} .chip.p3::after{content:"P3"}
+
+  .cross{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:19px 22px;
+         border-left:5px solid var(--cross);margin:13px 0}
+  .crosshead{display:flex;align-items:baseline;gap:11px;margin-bottom:3px}
+  .crossnum{font-size:10.5px;font-weight:800;letter-spacing:.1em;color:#fff;background:var(--cross);
+            border-radius:5px;padding:4px 9px}
+  .cross .chip.tool{background:var(--crosss);color:var(--cross)}
+
+  .note{background:#fdf4e9;border:1px solid #ecd0a8;border-left:4px solid var(--p2);
+        border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;font-size:14.5px}
+  .note b{color:var(--p2)}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+     border-bottom:2px solid var(--line);padding:0 12px 9px 0;font-weight:700}
+  td{border-bottom:1px solid var(--line);padding:12px 12px 12px 0;vertical-align:top;line-height:1.5}
+  tr:last-child td{border-bottom:none} td:last-child,th:last-child{padding-right:0}
+  code{background:#eae6de;border-radius:4px;padding:1.5px 5px;font-size:12.5px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  @media(max-width:680px){h1{font-size:27px}.row{grid-template-columns:1fr;gap:5px}.rlab{padding-top:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · System Architecture</div>
+  <h1>Every territory, and what you'll meet in each</h1>
+  <p class="sub">Top to bottom: where data enters, what happens to it, and where it comes out. Each box lists the tools you'll touch and the concepts you'll learn there — tagged with the pass that introduces them.</p>
+</header>
+
+<div class="legend">
+  <span class="lg"><span class="dot" style="background:var(--p0)"></span>P0 · Walking skeleton</span>
+  <span class="lg"><span class="dot" style="background:var(--p1)"></span>P1 · Depth</span>
+  <span class="lg"><span class="dot" style="background:var(--p2)"></span>P2 · Real world</span>
+  <span class="lg"><span class="dot" style="background:var(--p3)"></span>P3+ · Augmentation</span>
+</div>
+
+<h2>The main flow</h2>
+<div class="flow">
+
+  <div class="stage" style="--ac:var(--p0);--acs:var(--p0s)">
+    <div class="shead"><span class="snum">01</span><span class="stitle">External Sources</span></div>
+    <p class="sdesc">The outside world. Nothing here is under your control.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">TMDB API</span><span class="chip tool p1">Wikipedia</span>
+      <span class="chip tool p1">OMDb</span><span class="chip tool p2">Open-Meteo</span>
+      <span class="chip tool p2">IP geolocation</span><span class="chip tool p2">Showtimes provider</span>
+      <span class="chip tool p2">PDF documents</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">source tiers</span><span class="chip">licensing &amp; reuse</span>
+      <span class="chip">rate limits</span><span class="chip">API keys</span>
+      <span class="chip">provider fallback</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p0);--acs:var(--p0s)">
+    <div class="shead"><span class="snum">02</span><span class="stitle">Ingestion</span></div>
+    <p class="sdesc">Getting bytes in and keeping the originals.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">httpx</span><span class="chip tool p1">tenacity</span>
+      <span class="chip tool p2">pdfplumber</span><span class="chip tool p2">OCR</span>
+      <span class="chip tool p2">Kafka</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">raw payload retention</span><span class="chip">idempotency</span>
+      <span class="chip">retry &amp; backoff</span><span class="chip">incremental fetch</span>
+      <span class="chip">event-driven refresh</span><span class="chip">text + table extraction</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p1);--acs:var(--p1s)">
+    <div class="shead"><span class="snum">03</span><span class="stitle">Curation</span></div>
+    <p class="sdesc">Turning what arrived into what the database can hold. This is "AI-ready data."</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">Python</span><span class="chip tool p1">Pydantic</span>
+      <span class="chip tool p2">Databricks</span><span class="chip tool p2">Genie</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">normalisation</span><span class="chip">deduplication</span>
+      <span class="chip">provenance</span><span class="chip">claims &amp; conflict resolution</span>
+      <span class="chip">per-field source precedence</span><span class="chip">entity extraction</span>
+      <span class="chip">semantic layer</span><span class="chip">data quality profiling</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p0);--acs:var(--p0s)">
+    <div class="shead"><span class="snum">04</span><span class="stitle">Storage — one Postgres</span></div>
+    <p class="sdesc">Vectors, keywords, graph, and provenance all in the same database.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">PostgreSQL</span><span class="chip tool p0">pgvector</span>
+      <span class="chip tool p1">pg_search / BM25</span><span class="chip tool p1">SQLAlchemy</span>
+      <span class="chip tool p1">Alembic</span></div></div>
+    <div class="row"><div class="rlab">Tables</div><div class="chips">
+      <span class="chip">movies</span><span class="chip">raw_payloads</span><span class="chip">documents</span>
+      <span class="chip">chunks + embedding</span><span class="chip">nodes</span><span class="chip">edges</span>
+      <span class="chip">claims</span><span class="chip">eval_runs</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">schema design</span><span class="chip">migrations</span>
+      <span class="chip">vector indexes (HNSW)</span><span class="chip">full-text indexes</span>
+      <span class="chip">parent–child chunks</span><span class="chip">row-level security</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p1);--acs:var(--p1s)">
+    <div class="shead"><span class="snum">05</span><span class="stitle">Retrieval funnel</span></div>
+    <p class="sdesc">parse → filter → search ×2 → fuse → rerank → top 3</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">pgvector search</span><span class="chip tool p1">BM25</span>
+      <span class="chip tool p1">reciprocal rank fusion</span><span class="chip tool p1">cross-encoder reranker</span>
+      <span class="chip tool p1">small LLM for parsing</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">query parsing</span><span class="chip">hard filter vs. soft rank</span>
+      <span class="chip">hybrid search</span><span class="chip">rank fusion, not thresholds</span>
+      <span class="chip">reranking</span><span class="chip">small-to-big retrieval</span>
+      <span class="chip">chunking strategy</span><span class="chip">embedding model choice</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p1);--acs:var(--p1s)">
+    <div class="shead"><span class="snum">06</span><span class="stitle">Reasoning — the agent</span></div>
+    <p class="sdesc">The only place where the path is decided at runtime.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">plain LLM call</span><span class="chip tool p1">LangChain</span>
+      <span class="chip tool p1">LangGraph</span><span class="chip tool p1">tool registry</span>
+      <span class="chip tool p1">prompt library in Git</span></div></div>
+    <div class="row"><div class="rlab">Agent tools</div><div class="chips">
+      <span class="chip">graph_lookup</span><span class="chip">search</span><span class="chip">weather</span>
+      <span class="chip">showtimes</span><span class="chip">streaming_availability</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">the loop</span><span class="chip">ReAct</span><span class="chip">tool calling</span>
+      <span class="chip">termination conditions</span><span class="chip">human-in-the-loop interrupt</span>
+      <span class="chip">structured output</span><span class="chip">model routing</span>
+      <span class="chip">constraint relaxation</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p0);--acs:var(--p0s)">
+    <div class="shead"><span class="snum">07</span><span class="stitle">Serving</span></div>
+    <p class="sdesc">The contract between the system and anything that uses it.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">FastAPI</span><span class="chip tool p0">Pydantic</span>
+      <span class="chip tool p1">Uvicorn</span><span class="chip tool p3">Node.js service</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">REST design</span><span class="chip">request/response schemas</span>
+      <span class="chip">streaming responses</span><span class="chip">graceful degradation</span>
+      <span class="chip">caching</span></div></div>
+  </div>
+
+  <div class="conn">▼</div>
+
+  <div class="stage" style="--ac:var(--p3);--acs:var(--p3s)">
+    <div class="shead"><span class="snum">08</span><span class="stitle">Frontend</span></div>
+    <p class="sdesc">Deliberately the thinnest layer, and deliberately last.</p>
+    <div class="row"><div class="rlab">Tools</div><div class="chips">
+      <span class="chip tool p0">FastAPI auto-docs</span><span class="chip tool p3">single-page chat</span></div></div>
+    <div class="row"><div class="rlab">Concepts</div><div class="chips">
+      <span class="chip">the API is the product</span><span class="chip">labelled result groups</span>
+      <span class="chip">explaining the recommendation</span></div></div>
+  </div>
+
+</div>
+
+<h2>Cross-cutting — these touch every stage above</h2>
+
+<div class="cross">
+  <div class="crosshead"><span class="crossnum">A</span><span class="stitle">Observability</span></div>
+  <p class="sdesc">What did the system actually do, and what did it cost?</p>
+  <div class="row"><div class="rlab">Tools</div><div class="chips">
+    <span class="chip tool p0">structured logging</span><span class="chip tool p1">LangSmith</span></div></div>
+  <div class="row"><div class="rlab">Concepts</div><div class="chips">
+    <span class="chip">traces &amp; spans</span><span class="chip">cost per query</span>
+    <span class="chip">p95 latency</span><span class="chip">token accounting</span></div></div>
+</div>
+
+<div class="cross">
+  <div class="crosshead"><span class="crossnum">B</span><span class="stitle">Evaluation</span></div>
+  <p class="sdesc">Offline, on test data. Asks whether the <em>system</em> is good.</p>
+  <div class="row"><div class="rlab">Tools</div><div class="chips">
+    <span class="chip tool p0">5 hand-checked queries</span><span class="chip tool p1">golden dataset</span>
+    <span class="chip tool p1">RAGAS</span><span class="chip tool p1">pytest</span>
+    <span class="chip tool p1">GitHub Actions gate</span></div></div>
+  <div class="row"><div class="rlab">Concepts</div><div class="chips">
+    <span class="chip">recall@k · precision · F1</span><span class="chip">faithfulness</span>
+    <span class="chip">context recall</span><span class="chip">constraint compliance</span>
+    <span class="chip">regression detection</span><span class="chip">human feedback loop</span></div></div>
+</div>
+
+<div class="cross">
+  <div class="crosshead"><span class="crossnum">C</span><span class="stitle">Validation &amp; Guardrails</span></div>
+  <p class="sdesc">Online, per request. Asks whether <em>this one output</em> is safe to send.</p>
+  <div class="row"><div class="rlab">Where</div><div class="chips">
+    <span class="chip">input — injection, PII, off-topic</span>
+    <span class="chip">tool — least privilege, arg validation</span>
+    <span class="chip">output — schema, grounding, safety</span></div></div>
+  <div class="row"><div class="rlab">Concepts</div><div class="chips">
+    <span class="chip p1">prompt = request, code = guarantee</span>
+    <span class="chip p2">prompt injection red-team</span><span class="chip p2">availability verification</span>
+    <span class="chip p2">content safety</span></div></div>
+</div>
+
+<div class="cross">
+  <div class="crosshead"><span class="crossnum">D</span><span class="stitle">Governance &amp; Security</span></div>
+  <p class="sdesc">Policy, not a stage. It shows up everywhere.</p>
+  <div class="row"><div class="rlab">Tools</div><div class="chips">
+    <span class="chip tool p0">.env + gitignore</span><span class="chip tool p2">row-level security</span>
+    <span class="chip tool p3">IAM least privilege</span></div></div>
+  <div class="row"><div class="rlab">Concepts</div><div class="chips">
+    <span class="chip">secrets management</span><span class="chip">provenance &amp; lineage</span>
+    <span class="chip">source precedence ownership</span><span class="chip">location is PII</span>
+    <span class="chip">consent &amp; minimisation</span><span class="chip">retention windows</span>
+    <span class="chip">multi-tenancy</span><span class="chip">data residency</span></div></div>
+</div>
+
+<div class="cross">
+  <div class="crosshead"><span class="crossnum">E</span><span class="stitle">Delivery</span></div>
+  <p class="sdesc">How it gets from your laptop to somewhere real.</p>
+  <div class="row"><div class="rlab">Tools</div><div class="chips">
+    <span class="chip tool p0">Git</span><span class="chip tool p1">GitHub Actions</span>
+    <span class="chip tool p2">Docker</span><span class="chip tool p3">AWS Bedrock</span>
+    <span class="chip tool p3">Kubernetes</span></div></div>
+  <div class="row"><div class="rlab">Concepts</div><div class="chips">
+    <span class="chip">CI/CD</span><span class="chip">the eval gate</span><span class="chip">prompt versioning</span>
+    <span class="chip">containers vs. images</span><span class="chip">managed inference</span>
+    <span class="chip">cost &amp; latency budgets</span></div></div>
+</div>
+
+<div class="note">
+  <b>Read the shape, not just the boxes.</b> Stages 1–4 are about <em>data</em>. Stage 5 is about
+  <em>finding</em>. Stage 6 is the only place anything is <em>decided at runtime</em>. Stages 7–8 are
+  thin on purpose. And A–E aren't stages at all — they're properties the whole system either has or
+  doesn't.
+</div>
+
+<h2>Where the rich scene-level text comes from</h2>
+<p style="color:var(--soft);font-size:15px">A 200-word overview can never match “they confront an animal in the woods.” Three sources, layered:</p>
+<table>
+  <thead><tr><th style="width:20%">Source</th><th style="width:14%">Tier</th><th>What it gives</th></tr></thead>
+  <tbody>
+    <tr><td><b>Wikipedia plot sections</b></td><td>2 · CC BY-SA 4.0</td><td>700–1500 words, genuinely scene by scene. The only free, legally reusable, long-form plot source at scale. <b>This is the primary corpus.</b></td></tr>
+    <tr><td><b>TMDB keywords</b></td><td>2</td><td>Crowd-tagged concepts — “bear attack”, “forest”, “survival”. Short, high-signal, excellent for mood and scene matching.</td></tr>
+    <tr><td><b>TMDB overview + fields</b></td><td>1</td><td>Canonical metadata: title, runtime, cast, crew, genres, release date, watch providers.</td></tr>
+    <tr><td><b>PDF documents</b></td><td>3 · P2</td><td>Press kits, festival programmes, critic essays. Added later as a second source behind the same interface — and the reason conflict resolution has to exist.</td></tr>
+  </tbody>
+</table>
+
+<h2>How PDFs get stored — and how contradictions get settled</h2>
+<table>
+  <thead><tr><th style="width:26%">Where it lands</th><th>What's in it</th></tr></thead>
+  <tbody>
+    <tr><td><code>documents</code></td><td>One row per PDF: filename, checksum, page count, source, licence, ingested_at. The original file itself stays on disk untouched.</td></tr>
+    <tr><td><code>pages</code></td><td>Extracted text per page, with page number kept so any answer can cite “page 7.”</td></tr>
+    <tr><td><code>chunks</code></td><td><b>The same table the movie text uses.</b> One retrieval surface, many source types — distinguished by a <code>source_type</code> column. This is why the search doesn't care where text came from.</td></tr>
+    <tr><td><code>claims</code></td><td>Where contradictions become visible: <code>entity · attribute · value · source · confidence · observed_at</code>. Two rows disagreeing is a detectable state instead of an invisible one.</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <b>The rule for contradictions.</b> Precedence is declared <em>per field</em>, never globally — an
+  API may be authoritative on runtime while a press kit is authoritative on billing order. The losing
+  claim is never deleted, only marked superseded, so “why does it say lead?” stays answerable. Low-stakes
+  fields resolve silently; high-stakes ones get flagged to a human. And who sets the precedence order is
+  a <em>governance</em> decision, not an engineering one.
+</div>
+
+<footer>MovieMotions architecture · 14 August 2026 · Eight stages, five cross-cutting concerns, four passes.</footer>
+
+</div>
+</body>
+</html>

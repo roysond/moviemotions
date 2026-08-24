@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks + Genie — Exercise</title>
+<style>
+  :root{
+    --ink:#17262c; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f2f0ea; --card:#fff; --line:#dcd7cd;
+    --a:#a35a18; --as:#f9efe3;
+    --b:#2c5f8f; --bs:#e5edf4;
+    --c:#96305a; --cs:#f9e8ef;
+    --d:#1e6b56; --ds:#e3f0ec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.62 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:44px 22px 80px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:20px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--a);font-weight:700}
+  h1{font-size:33px;line-height:1.15;margin:9px 0 10px;letter-spacing:-.02em}
+  .sub{font-size:16.5px;color:var(--soft);margin:0;max-width:66ch}
+  .file{display:inline-block;margin-top:14px;background:var(--card);border:1px solid var(--line);
+        border-radius:8px;padding:9px 15px;font-size:13.5px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  h2{display:flex;align-items:baseline;gap:11px;font-size:21px;margin:42px 0 6px;letter-spacing:-.015em}
+  .num{font-size:10.5px;font-weight:800;letter-spacing:.1em;color:#fff;background:var(--ac);
+       border-radius:5px;padding:4px 9px;position:relative;top:-2px}
+  .time{font-size:12.5px;color:var(--muted);font-weight:600}
+  .lede{font-size:15px;color:var(--soft);margin:0 0 14px}
+
+  pre{background:#1f2b30;color:#dfe7ea;border-radius:11px;padding:17px 20px;overflow-x:auto;
+      font-size:12.8px;line-height:1.68;margin:14px 0;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre .c{color:#7f9aa5}
+  code{background:#eae6de;border-radius:4px;padding:1.5px 5px;font-size:13px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit}
+
+  ol{padding-left:20px} li{margin-bottom:8px;font-size:15px}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 21px;margin:14px 0}
+  .pull{background:var(--acs);border-left:4px solid var(--ac);border-radius:0 11px 11px 0;
+        padding:17px 21px;margin:18px 0;font-size:16.5px;font-weight:600;color:var(--ac);line-height:1.5}
+  .warn{background:#fdf3e8;border:1px solid #eac9a4;border-left:4px solid var(--a);
+        border-radius:0 11px 11px 0;padding:16px 20px;margin:16px 0;font-size:14.8px;color:var(--soft)}
+  .warn b{color:var(--a)}
+
+  .quote{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);
+         border-radius:0 12px 12px 0;padding:18px 22px;margin:14px 0}
+  .quote .lbl{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--c);
+              font-weight:700;margin-bottom:9px}
+  .quote p{margin:0;font-size:15px;line-height:1.62;color:var(--ink);font-style:italic}
+  footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  @media(max-width:640px){h1{font-size:26px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · Side exercise</div>
+  <h1>Databricks + Genie in 45 minutes</h1>
+  <p class="sub">Synthetic health-plan enrollment data with deliberate defects. The point isn't to clean it — it's to discover something specific about what AI-over-data actually requires.</p>
+  <div class="file">member_enrollment_sample.csv · 81 rows · 8 columns</div>
+</header>
+
+<section style="--ac:var(--b);--acs:var(--bs)">
+  <h2><span class="num">01</span> Setup <span class="time">10 min</span></h2>
+  <div class="box">
+    <ol>
+      <li>Sign up at <code>databricks.com/signup/free-edition</code></li>
+      <li><b>Catalog → Create table</b> → upload the CSV</li>
+      <li>Name it <code>member_enrollment</code></li>
+      <li>Open a notebook or the SQL editor and look at it</li>
+    </ol>
+  </div>
+</section>
+
+<section style="--ac:var(--b);--acs:var(--bs)">
+  <h2><span class="num">02</span> Profile the data <span class="time">this is “curation”</span></h2>
+  <p class="lede">Each query exposes a different defect.</p>
+<pre><code><span class="c">-- How many ways is "active" spelled?</span>
+SELECT status, count(*) FROM member_enrollment GROUP BY status ORDER BY 2 DESC;
+
+<span class="c">-- How many distinct states? (there are only 10 real ones)</span>
+SELECT count(DISTINCT state) FROM member_enrollment;
+
+<span class="c">-- Premiums stored as text with currency symbols</span>
+SELECT member_id, monthly_premium FROM member_enrollment
+WHERE monthly_premium LIKE '$%' LIMIT 10;
+
+<span class="c">-- Members appearing twice, with different data</span>
+SELECT member_id, count(*) FROM member_enrollment
+GROUP BY member_id HAVING count(*) > 1;
+
+<span class="c">-- THE CONTRADICTION: flagged active, but has a termination date</span>
+SELECT member_id, status, termination_date FROM member_enrollment
+WHERE upper(trim(status)) LIKE 'A%' AND termination_date &lt;&gt; '';</code></pre>
+  <div class="warn">
+    You'll find inconsistent casing, states as both codes and full names, premiums as text, negative and missing values, and duplicate IDs with conflicting data.<br><br>
+    <b>But the last query is different.</b> A record that claims to be active while carrying a termination date isn't a formatting problem — it's a contradiction in the business record. No amount of cleaning resolves it.
+  </div>
+</section>
+
+<section style="--ac:var(--a);--acs:var(--as)">
+  <h2><span class="num">03</span> Ask Genie</h2>
+  <p class="lede">Create a Genie space over the table, then ask it in plain English:</p>
+  <div class="pull">“How many active members do we have?”</div>
+  <p class="lede">It will give you a number. <b>Write it down.</b> Now ask the same question three ways yourself:</p>
+<pre><code><span class="c">-- A: trust the status column</span>
+SELECT count(*) FROM member_enrollment
+WHERE upper(trim(status)) LIKE 'A%';
+
+<span class="c">-- B: active means no termination date</span>
+SELECT count(*) FROM member_enrollment
+WHERE termination_date = '';
+
+<span class="c">-- C: active, not terminated, AND paid recently</span>
+SELECT count(*) FROM member_enrollment
+WHERE upper(trim(status)) LIKE 'A%'
+  AND termination_date = ''
+  AND last_payment_date &gt;= date_sub(current_date(), 45);</code></pre>
+  <p class="lede"><b>You will get three different numbers.</b> All three definitions are defensible. Different departments would each argue for a different one.</p>
+</section>
+
+<section style="--ac:var(--c);--acs:var(--cs)">
+  <h2><span class="num">04</span> The point</h2>
+  <div class="pull">Genie wasn't wrong. The business hadn't decided.</div>
+  <p class="lede">The model produced a confident, plausible number by silently picking one interpretation of a word nobody had defined. Nothing in the data told it which was correct — because nothing in the data <em>could</em>.</p>
+  <p class="lede">That's what a <b>semantic layer</b> is for, and it's why “data readiness” and “text-to-SQL” turn out to be the same problem.</p>
+</section>
+
+<section style="--ac:var(--d);--acs:var(--ds)">
+  <h2><span class="num">05</span> Fix it</h2>
+  <p class="lede">Define the term once, in one place, and point Genie at that instead.</p>
+<pre><code>CREATE OR REPLACE VIEW active_members AS
+SELECT * FROM member_enrollment
+WHERE upper(trim(status)) LIKE 'A%'
+  AND termination_date = ''
+  AND last_payment_date &gt;= date_sub(current_date(), 45);</code></pre>
+  <p class="lede">Ask Genie again. <b>One definition, one answer, every time.</b></p>
+  <p class="lede">That view is a semantic layer in its simplest possible form — an agreed definition, written down, that every consumer uses.</p>
+</section>
+
+<section>
+  <h2 style="--ac:var(--c)"><span class="num" style="background:var(--c)">★</span> Three talking points you'll have earned</h2>
+
+  <div class="quote">
+    <div class="lbl">On data curation</div>
+    <p>“I profiled an enrollment file and found the usual things — inconsistent casing, states recorded both as codes and names, currency stored as text, duplicate IDs. But the one that mattered was records flagged active that also carried a termination date. That's not a formatting defect, it's a contradiction in the business record, and no amount of cleaning resolves it — somebody has to decide which field wins.”</p>
+  </div>
+
+  <div class="quote">
+    <div class="lbl">On Genie and semantic layers</div>
+    <p>“I asked Genie how many active members we had and got a confident number. Then I wrote the query three ways — trusting the status flag, checking for a termination date, and adding payment recency — and got three different counts. Genie wasn't wrong. The business hadn't defined the term. That's when semantic layers stopped being abstract for me: a natural-language interface is only as good as the definitions underneath it.”</p>
+  </div>
+
+  <div class="quote">
+    <div class="lbl">On data readiness for AI</div>
+    <p>“Text-to-SQL makes data quality problems visible in a way dashboards never did. A dashboard has a definition baked into it by whoever built it. An LLM writing SQL re-derives that definition every time, from nothing — so any term the business hasn't agreed on becomes a source of quietly inconsistent answers.”</p>
+  </div>
+</section>
+
+<footer>MovieMotions · Databricks + Genie exercise · Synthetic data, no real PII · 16 August 2026</footer>
+
+</div>
+</body>
+</html>

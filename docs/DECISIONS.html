@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — Decisions and Why</title>
+<style>
+  :root{
+    --ink:#17262c; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f2f0ea; --card:#fff; --line:#dcd7cd;
+    --a:#1a6f68; --as:#e3efee;   /* approach */
+    --b:#2c5f8f; --bs:#e5edf4;   /* domain/sources */
+    --c:#a35a18; --cs:#f9efe3;   /* storage */
+    --d:#6a4a8c; --ds:#eee8f5;   /* models */
+    --e:#2b6b3f; --es:#e5f1e9;   /* retrieval */
+    --f:#96305a; --fs:#f9e8ef;   /* security */
+    --g:#8a6a12; --gs:#f8f1dd;   /* build vs buy */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:44px 22px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:20px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--c);font-weight:700}
+  h1{font-size:36px;line-height:1.13;margin:9px 0 10px;letter-spacing:-.022em}
+  .sub{font-size:17px;color:var(--soft);margin:0;max-width:64ch}
+  .howto{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);
+         border-radius:0 11px 11px 0;padding:15px 20px;margin:20px 0 34px;font-size:14.5px;color:var(--soft)}
+  .howto b{color:var(--ink)}
+
+  section{margin:38px 0}
+  h2{display:flex;align-items:center;gap:11px;font-size:20px;margin:0 0 4px;letter-spacing:-.015em}
+  .tag{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+       color:#fff;background:var(--ac);border-radius:5px;padding:4px 9px}
+  .lede{font-size:14.5px;color:var(--muted);margin:0 0 14px}
+
+  .scroll{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+          border-left:5px solid var(--ac)}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th{text-align:left;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+     border-bottom:2px solid var(--line);padding:13px 18px 10px;font-weight:700;background:#faf9f6}
+  td{border-bottom:1px solid #eeebe4;padding:13px 18px;vertical-align:top;line-height:1.55}
+  tr:last-child td{border-bottom:none}
+  td:first-child{font-weight:650;width:38%;color:var(--ink)}
+  td:last-child{color:var(--soft)}
+  tbody tr:hover{background:#fafaf7}
+
+  .pull{background:var(--acs);border-radius:11px;padding:16px 20px;margin:14px 0;
+        font-size:15.5px;color:var(--ac);font-weight:600;line-height:1.5}
+  .proof{background:var(--card);border:1px dashed var(--line);border-radius:11px;
+         padding:14px 19px;margin:14px 0;font-size:14px;color:var(--soft)}
+  .proof b{color:var(--ink)}
+
+  pre{background:#1f2b30;color:#dfe7ea;border-radius:11px;padding:17px 20px;overflow-x:auto;
+      font-size:13px;line-height:1.7;margin:14px 0;
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  code{background:#eae6de;border-radius:4px;padding:1.5px 5px;font-size:13px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit}
+
+  .four{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:16px 0}
+  .f{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:17px 19px;
+     border-top:3px solid var(--ink)}
+  .f b{display:block;font-size:15px;margin-bottom:6px}
+  .f span{font-size:13.5px;color:var(--soft);line-height:1.55}
+  footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  @media(max-width:640px){h1{font-size:27px}td:first-child{width:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · Decision Record</div>
+  <h1>What we decided, and why</h1>
+  <p class="sub">Not a reference document. A memory aid — one line of reasoning per decision, so the architecture reminds you why it's shaped this way.</p>
+</header>
+
+<div class="howto">
+  <b>How to use this.</b> Read it before starting a pass. It should take four minutes. If a row surprises you, that's the one to sit with.
+</div>
+
+<section style="--ac:var(--a);--acs:var(--as)">
+  <h2><span class="tag">01</span> How we build</h2>
+  <p class="lede">The method, decided before any code existed.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Walking skeleton, then depth — everything crude and connected before anything is good</td><td>You cannot tell whether a layer is right until something downstream consumes it</td></tr>
+      <tr><td>Passes, not phases</td><td>Revisiting a component three times, spaced apart, beats one long stretch on it</td></tr>
+      <tr><td>Iterative ≠ incremental — improving what exists vs adding what doesn't</td><td>Two different activities. Naming them separately keeps a pass honest</td></tr>
+      <tr><td>Every pass gets a written exit condition, <em>before</em> it starts</td><td>Otherwise “improve retrieval” never ends</td></tr>
+      <tr><td>Only seven things must be right early</td><td>Everything else is allowed to be embarrassing on the first attempt</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section style="--ac:var(--b);--acs:var(--bs)">
+  <h2><span class="tag">02</span> The domain &amp; sources</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Mood-driven movie recommendation</td><td>Genuinely multi-tool, so agentic behaviour is inherent rather than decorative</td></tr>
+      <tr><td>Not a trivia corpus</td><td>Streaming and theatre data go stale weekly — real drift, not simulated</td></tr>
+      <tr><td>Location is part of it</td><td>IP and coordinates are personal data, so privacy becomes real, not theoretical</td></tr>
+      <tr><td>Scene-level retrieval is a requirement</td><td>“They confront an animal in the woods” must find films where that isn't the plot</td></tr>
+      <tr><td><b>TMDB is primary</b></td><td>Facts, cast and crew, keywords, availability — rich in structure</td></tr>
+      <tr><td><b>Wikipedia plot sections for narrative</b> (Pass 1)</td><td>The only free, legally reusable, long-form, scene-by-scene source at scale</td></tr>
+      <tr><td>Join them via Wikidata ID, not title</td><td>Titles collide; identifiers don't. Same problem as matching a patient across two systems</td></tr>
+      <tr><td>Pass 0 uses TMDB only</td><td>You need to <em>feel</em> shallow retrieval fail before enrichment means anything</td></tr>
+      <tr><td>Keep top ~10 cast; filter crew to four roles</td><td>One film returned 206 people. Noise in a graph costs you at every traversal, forever</td></tr>
+    </tbody>
+  </table></div>
+  <div class="pull">TMDB is rich in facts and poor in narrative. That one sentence explains the whole source strategy.</div>
+  <div class="proof"><b>Proven, not assumed.</b> TMDB's synopsis for Jurassic Park is <b>348 characters</b>. No character names, no dinosaur species, no scenes. A semantic search over it cannot answer a scene question — the information simply isn't there.</div>
+</section>
+
+<section style="--ac:var(--c);--acs:var(--cs)">
+  <h2><span class="tag">03</span> Storage</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>One Postgres holds vectors, keyword index, and graph</td><td>One database, one backup, one connection</td></tr>
+      <tr><td><b>Schema built from requirements, not the source's shape</b></td><td>Sources change; requirements don't. A TMDB-shaped table would break when Wikipedia arrives</td></tr>
+      <tr><td><b>Keep <code>raw_payload</code> untouched</b></td><td>Every future extraction comes from it. No re-fetching, ever</td></tr>
+      <tr><td>Our own <code>id</code>, plus <code>source</code> + <code>source_id</code></td><td>The identifier can't belong to any one provider</td></tr>
+      <tr><td><code>UNIQUE (source, source_id)</code></td><td>The database prevents duplicates — not your code remembering to check</td></tr>
+      <tr><td>No cast, crew or keyword tables yet</td><td>They're already inside <code>raw_payload</code>. That rule paid off on day one</td></tr>
+    </tbody>
+  </table></div>
+  <div class="pull">A field earns a column when something needs to filter, sort, join, or look it up. Otherwise it stays in the raw payload.<br><span style="font-weight:400;font-size:14px">Test in reverse: if I deleted this column, what would break?</span></div>
+</section>
+
+<section style="--ac:var(--d);--acs:var(--ds)">
+  <h2><span class="tag">04</span> Models</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>AWS Bedrock as provider</td><td>The target job description names it first. Free plan allows Amazon's own models</td></tr>
+      <tr><td><code>us-east-1</code>, not Ohio</td><td>89 models vs 75, and every tutorial assumes N. Virginia</td></tr>
+      <tr><td><b>US inference profile, not Global</b></td><td>Global may process outside the US. That dropdown <em>is</em> data residency</td></tr>
+      <tr><td><b>Nova Micro for query parsing</b></td><td>Measured: identical output to Claude Haiku, <b>337 ms faster</b></td></tr>
+      <tr><td><b>Nova 2 Multimodal Embeddings @ 1024 dims</b></td><td>Benchmarked 3 models on 5 real queries — it ranked best. 1024 sits inside pgvector's 2,000-dim index cap; more dims isn't "safer" (no overflow)</td></tr>
+      <tr><td><b>Reranker: prefer first-party (Amazon Rerank 1.0) over Cohere</b></td><td>The free-plan blocker is the <i>vendor</i>, not the model — Cohere is a paid AWS Marketplace product the plan can't subscribe to. Every version hits the same wall</td></tr>
+      <tr><td><b>Rerank cross-region (us-west-2) is acceptable</b></td><td>A rerank call is stateless — query + docs in, order out — so it needn't sit with the DB. Trade: text crosses region, a conscious data-residency choice</td></tr>
+      <tr><td><code>converse</code> API, not <code>invoke_model</code></td><td>Same request shape for every model, so swapping models is a config change</td></tr>
+      <tr><td><code>temperature: 0</code> for parsing</td><td>Translation, not creativity. Same input should give the same output</td></tr>
+      <tr><td><b>Explicit prompt over a stronger model's inference</b></td><td>Nova Pro <em>guessed</em> right. Nova Micro was <em>told</em>. Specified beats emergent</td></tr>
+      <tr><td>An <code>unresolved</code> field in the output</td><td>Give the model a way to say “I don't know”, or it will guess silently</td></tr>
+    </tbody>
+  </table></div>
+  <div class="proof"><b>Measured, not assumed.</b> The same prompt costs 184 / 192 / 222 input tokens on Nova / DeepSeek / Claude — different tokenizers. <b>You can't compare model cost by token count. Only by cost per task.</b></div>
+</section>
+
+<section style="--ac:var(--e);--acs:var(--es)">
+  <h2><span class="tag">05</span> Retrieval — designed, not yet built</h2>
+<pre><code>parse query  →  hard filter (metadata + graph)  →  vector + BM25 in parallel
+             →  reciprocal rank fusion  →  rerank ~50  →  top 3</code></pre>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Parse the query into structured filters first</td><td>A database can't act on a sentence. It needs names and numbers</td></tr>
+      <tr><td><b>Only the mood gets embedded</b></td><td>“Nothing over two hours” in a vector adds noise. Parsing <em>improves</em> search, not just filtering</td></tr>
+      <tr><td>The graph is a filter, not a ranker</td><td>Graph facts are binary. There's nothing to rank</td></tr>
+      <tr><td><b>Fuse on rank, never on score thresholds</b></td><td>A cosine of 0.78 means different things per query, and BM25 scores aren't on the same scale at all</td></tr>
+      <tr><td>Small-to-big: chunk at scene level, return the parent film</td><td>Small chunks match precisely; users want the film, not the paragraph</td></tr>
+      <tr><td><b>Retrieve wide (10), rerank to narrow (3)</b></td><td>The right answer may sit at rank 4–8 by vector; a top-3 retrieval never sees it. The wide net gives the reranker something to rescue</td></tr>
+      <tr><td><b>External model calls degrade, never crash</b></td><td><code>search()</code> wraps rerank in try/except and falls back to vector. A vendor outage costs quality, not availability</td></tr>
+      <tr><td><b>Filters output sets; retrievers output lists; RRF fuses lists</b></td><td>Which is <i>why</i> a graph (a filter → a set) never enters RRF. Rank-fusion needs two lists to exist</td></tr>
+      <tr><td><b>Hard constraints deterministic, soft preferences semantic</b></td><td>The most important line in the build. The model must never invent a showtime</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section style="--ac:var(--f);--acs:var(--fs)">
+  <h2><span class="tag">06</span> Security &amp; governance</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>One <code>.env</code>, gitignored, loaded in exactly one place</td><td>That single <code>load_dotenv()</code> is the seam. Moving to a secret manager deletes one line</td></tr>
+      <tr><td>IAM user with <b>no console access</b></td><td>Least privilege by <em>kind</em>, not just amount. A leaked key isn't a browser session</td></tr>
+      <tr><td>Two identities: app invokes, assistant reads</td><td>Neither can do the other's job. Separation of duties</td></tr>
+      <tr><td><code>deny</code> rules in <code>settings.json</code></td><td>Enforced by the program, outside the model. <b>A prompt is a request; code is a guarantee</b></td></tr>
+      <tr><td>Never echo a secret — verify by property or by effect</td><td>A key's length proves it's well-formed. A successful call proves it works. Neither exposes it</td></tr>
+      <tr><td>A third-party register</td><td>“Can we ship this?” should be answerable in one sentence</td></tr>
+      <tr><td><b>Source precedence declared per field, never globally</b></td><td>An API may be authoritative on runtime while a press kit is authoritative on billing order</td></tr>
+      <tr><td><b>Never rewrite source text</b></td><td><code>chunks</code> = what a source said. <code>claims</code> = what the system believes. Delete the loser and you destroy the evidence</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section style="--ac:var(--g);--acs:var(--gs)">
+  <h2><span class="tag">07</span> Build versus buy</h2>
+  <p class="lede">Every item on this roadmap has a managed AWS equivalent — Knowledge Bases, Evaluations, Guardrails, Prompt Management, Prompt Router, Flows, AgentCore.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Build them by hand first</td><td>Clicking “Create evaluation” teaches nothing about what makes a good test case</td></tr>
+      <tr><td>Compare against the managed version in Pass 3</td><td>“I built it, then evaluated theirs” is an architect's answer. “I used theirs” isn't</td></tr>
+    </tbody>
+  </table></div>
+  <div class="pull">Buy the generic layer. Build the layer that encodes your business.<br>Rent what isn't your differentiator. Own what is.</div>
+  <div class="proof">The strongest version of that argument, in your own system: <b>the metric that matters most — “is this film actually available to this user?” — doesn't exist in any managed eval service</b>, because no vendor knows your business rules.</div>
+</section>
+
+<section>
+  <h2 style="--ac:var(--ink)"><span class="tag" style="background:var(--ink)">★</span> Four things above all</h2>
+  <div class="four">
+    <div class="f"><b>RAG is a noun. Agentic is a verb.</b><span>A pipeline versus a loop. Retrieval is one tool the loop can use.</span></div>
+    <div class="f"><b>The flowchart test</b><span>If you can draw it before the query arrives, it's a pipeline. If the shape depends on the query, it's agentic.</span></div>
+    <div class="f"><b>Structure is created at write time</b><span>Not read time. Someone always pays the extraction cost — an API means someone already did.</span></div>
+    <div class="f"><b>Keep the raw thing</b><span>Derive everything else from it. Derived data can be rebuilt; discarded raw data is gone.</span></div>
+  </div>
+</section>
+
+<footer>MovieMotions · Decision record · 15 August 2026 · Update at the end of every pass.</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — Pass 2 · The Pipeline Becomes a Loop</title>
+<style>
+  :root{
+    --ink:#16242b; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f3f1eb; --card:#fff; --line:#d8d3c8;
+    --band:#eceadf;
+    --p0:#8a6d3b; --p0s:#faf4e8; --p0b:#e0cdaa;
+    --p1:#1c5f8f; --p1s:#e8f1f8; --p1b:#b4cee4;
+    --p2:#6b3fa0; --p2s:#f0eaf8; --p2b:#cbb6e6;
+    --why:#5c4a72; --whys:#f2eef8; --whyb:#d8cbe8;
+    --new:#1e6b56; --news:#e2f0eb; --newb:#a8d3c5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 20px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:16px;margin-bottom:8px}
+  .badge{display:inline-block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+         font-weight:800;padding:4px 12px;border-radius:20px;color:#fff}
+  h1{font-size:29px;line-height:1.12;margin:10px 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--soft);font-size:14px;max-width:80ch}
+  .pairnote{margin-top:10px;background:var(--card);border:1px solid var(--line);
+            border-left:4px solid var(--ink);border-radius:0 10px 10px 0;padding:10px 14px;
+            font-size:13px;color:var(--soft)}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:16px 0 4px;font-size:12px;color:var(--soft)}
+  .legend i{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+
+  /* stage grid */
+  .stage{display:grid;grid-template-columns:96px 1fr 292px;gap:0;align-items:stretch;
+         min-height:132px;margin:0}
+  @media(max-width:900px){.stage{grid-template-columns:1fr}}
+  .tab{background:var(--band);border:1px solid var(--line);border-right:none;
+       border-radius:10px 0 0 10px;padding:12px 10px;display:flex;flex-direction:column;
+       justify-content:center;gap:4px;text-align:center}
+  .tab .num{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--muted);line-height:1}
+  .tab .nm{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+  .tab .sl{font-size:10.5px;color:var(--muted);font-weight:600}
+
+  .node{background:var(--card);border:1px solid var(--line);padding:13px 16px;
+        display:flex;flex-direction:column;justify-content:center;gap:7px}
+  .why{background:var(--whys);border:1px solid var(--whyb);border-left:none;
+       border-radius:0 10px 10px 0;padding:12px 14px;font-size:12.4px;line-height:1.5;
+       color:var(--why);display:flex;flex-direction:column;justify-content:center}
+  .why b{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+         margin-bottom:5px;opacity:.75}
+  @media(max-width:900px){
+    .tab{border-radius:10px 10px 0 0;border-right:1px solid var(--line);flex-direction:row;gap:9px}
+    .why{border-radius:0 0 10px 10px;border-left:1px solid var(--whyb)}
+  }
+
+  /* boxes inside a node */
+  .box{border:1.5px solid var(--p0b);background:var(--p0s);border-radius:7px;
+       padding:7px 11px;font-size:12.8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .box.new{border-color:var(--newb);background:var(--news)}
+  .box .lbl{font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;
+            font-family:inherit;color:var(--p0);display:block;margin-bottom:2px}
+  .box.new .lbl{color:var(--new)}
+  .box .note{display:block;font-family:ui-sans-serif,system-ui,sans-serif;
+             font-size:11.6px;color:var(--soft);margin-top:3px;line-height:1.45}
+  .rowbox{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+  .rowbox > .box{flex:1;min-width:150px}
+  .arrowr{align-self:center;color:var(--muted);font-size:15px;font-weight:700}
+
+  /* vertical connector */
+  .conn{height:26px;display:grid;grid-template-columns:96px 1fr 292px}
+  .conn div:nth-child(2){display:flex;align-items:center;justify-content:center;
+       color:var(--muted);font-size:15px;line-height:1}
+  @media(max-width:900px){.conn{grid-template-columns:1fr}.conn div:nth-child(1),.conn div:nth-child(3){display:none}}
+
+  h2.sec{font-size:17px;margin:34px 0 12px;letter-spacing:-.01em;
+         padding-bottom:7px;border-bottom:2px solid var(--ink)}
+
+  /* lineage strip */
+  .lineage{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:16px}
+  @media(max-width:760px){.lineage{grid-template-columns:1fr 1fr}}
+  .lin{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);font-size:12.2px}
+  .lin .t{font-size:10px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;margin-bottom:4px}
+  .lin.done{background:var(--p0s);border-color:var(--p0b)}
+  .lin.done .t{color:var(--p0)}
+  .lin.here{background:var(--p2s);border-color:var(--p2b);box-shadow:0 0 0 2px var(--p2b)}
+  .lin.here .t{color:var(--p2)}
+  .lin.next{opacity:.62}
+  .lin .t small{float:right;font-weight:700;letter-spacing:0;text-transform:none}
+
+  footer{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .badge{background:var(--p2)}
+</style></head>
+<body><div class="wrap">
+
+<header>
+  <span class="badge">Pass 2 &#183; the pipeline becomes a loop</span>
+  <h1>One component changed shape — and everything downstream had to grow to hold it</h1>
+  <div class="sub"><b>Pass 1 deepened all eight components without adding one. Pass 2 does the
+  opposite:</b> seven components barely move, and <b>Reason</b> stops being a straight line. A single
+  LLM call becomes a graph that decides, acts, looks at what came back, and decides again. Retrieval
+  recall is unchanged at <b>86.2%</b> — this pass bought a different kind of correctness.</div>
+  <div class="pairnote"><b>Read beside <code>PASS-0-DIAGRAM.html</code> and
+  <code>PASS-1-DIAGRAM.html</code>.</b> Same eight rows, same order, same positions.
+  <span style="color:var(--p0);font-weight:700">Sand boxes</span> are carried over from Passes 0&#8211;1;
+  <span style="color:var(--new);font-weight:700">green boxes</span> are what Pass 2 added.</div>
+  <div class="legend">
+    <span><i style="background:var(--p0s);border:1.5px solid var(--p0b)"></i>carried from Pass 0&#8211;1</span>
+    <span><i style="background:var(--news);border:1.5px solid var(--newb)"></i>added in Pass 2</span>
+    <span><i style="background:var(--whys);border:1.5px solid var(--whyb)"></i>why — and what it cost to learn</span>
+  </div>
+</header>
+
+<h2 class="sec">The pipeline, end to end</h2>
+
+<div class="stage">
+  <div class="tab"><div class="num">1</div><div class="nm">Ingest</div><div class="sl">get the data</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">unchanged</span>TMDB + Wikipedia plots<span class="note">20 films, all <code>fidelity: verbatim</code></span></div>
+      <div class="box new"><span class="lbl">discovered, not fetched</span>genres + keywords + credits already on disk<span class="note">in <code>data/raw/tmdb_*.json</code> since Pass 0 &#183; never used</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>No new source this pass. But an audit found <b>13
+  distinct genres, plus cast and keywords, already downloaded and ignored</b> for two passes.
+  <b>Check what you already have before fetching anything.</b> The cheapest data is the data you
+  forgot you stored.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:180px">
+  <div class="tab"><div class="num">2</div><div class="nm">Curate</div><div class="sl">make it usable</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">unchanged</span>overview &#183; derived &#183; plot<span class="note">185 chunks, untouched</span></div>
+      <div class="box new"><span class="lbl">tested &amp; rejected</span>a <code>genre</code> corpus<span class="note">20 chunks built, measured, deleted</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">the rule that settled it</span>corpus carries MEANING &#183; columns carry FACTS<span class="note">a label has a yes/no test, so it belongs in a WHERE clause</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>Royson argued genre is a filter, not a corpus. I
+  argued the opposite, then <b>predicted in writing that adding it would hurt</b>. One run said recall
+  jumped 86.2&#8594;96.6%. It <b>did not reproduce</b>: leave-one-out ablation and a re-run both
+  returned exactly the pre-genre baseline.<br><br><b>A result you got once is an anecdote.</b>
+  Reproduce before you interpret — and never write the explanation for the number you liked.
+  Residual: OpenRouter is a <i>gateway</i>, so the same model id can land on a different backend
+  between runs. Rerank scores are not stable to 3 decimals.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">3</div><div class="nm">Embed</div><div class="sl">text &#8594; vectors</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">unchanged</span>Nova 2 @ 1024d &#183; hybrid chunking &#183; arm D<span class="note">header in the index, not at rerank &#183; still the champion</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why it did NOT change</b>Nothing this pass gave a reason to touch it, and
+  changing an unmeasured thing is how you lose a baseline. The header question stayed settled — and
+  got <i>firmer</i>: with the corpus re-measured, arm B's 3.5-point lead over D vanished entirely.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">4</div><div class="nm">Storage</div><div class="sl">where it lives</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">unchanged</span>185 chunks &#183; 225 vectors<span class="note">plot carries 2 embed_variants, the rest 1</span></div>
+      <div class="box new"><span class="lbl">new store, not in Postgres</span>LangGraph checkpointer<span class="note">graph state, keyed by thread_id</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>A second kind of persistence appears, and it is not
+  the database. A paused graph has to live somewhere: <b>without a checkpointer a pause is just a
+  crash with nothing to come back to.</b> <code>InMemorySaver</code> is process-local; a Postgres
+  saver is the only change needed to survive a restart.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:250px">
+  <div class="tab"><div class="num">5</div><div class="nm">Retrieve</div><div class="sl">find candidates</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 1</span>stratify &#8594; rerank &#8594; aggregate &#8594; collapse<span class="note">unchanged, still arm D</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">a &#183; hard constraints</span>runtime / year in the SQL <code>WHERE</code><span class="note">applied ABOVE <code>ROW_NUMBER()</code> — filter before you budget</span></div>
+      <div class="box new"><span class="lbl">b &#183; a second retriever</span><code>get_film()</code> — exact title, no vectors at all<span class="note">semantic similarity cannot do exact identity</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">c &#183; evidence returned</span>the matched text travels back with each film<span class="note">was silently discarded &#183; 320 chars</span></div>
+      <div class="box new"><span class="lbl">d &#183; the ablation dial</span><code>sources=[...]</code><span class="note">an instrument, not a feature</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b><b>3 of 5 results broke a constraint the user said
+  out loud</b> — "under 2 hours" was embedded as mood. Vectors capture topic, not truth value:
+  "not a cartoon" embeds <i>next to</i> "a cartoon". <b>The LLM extracts, the database
+  enforces.</b><br><br>Filtering after the quota shrinks the basket after you have finished shopping;
+  filtering before it refills with eligible films. (An <code>hnsw</code> index will make pre-filtering
+  hard — parked, cannot bite at 185 chunks.)<br><br>Evidence was the quiet one: the tool reported
+  <i>which</i> film matched and <i>where</i>, never the words. <b>Retrieval you do not pass on is
+  retrieval you did not do.</b></div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:330px">
+  <div class="tab"><div class="num">6</div><div class="nm">Reason</div><div class="sl">decide &amp; explain</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0&#8211;1 &#183; replaced</span>one LLM call &#8594; strict JSON<span class="note">a straight line you could draw before the query arrived</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box new"><span class="lbl">now</span>a LangGraph loop<span class="note">shape depends on the query — cannot be drawn in advance</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">nodes</span>think &#183; act &#183; review<span class="note">think asks the model; act runs tools; review stops for a human</span></div>
+      <div class="box new"><span class="lbl">the one edge that matters</span><code>add_edge("act","think")</code><span class="note">the backward edge IS the loop &#183; ReAct, hand-wired not prebuilt</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">tools</span><code>search_films</code> &#183; <code>lookup_film</code><span class="note">DISJOINT purposes — a blurry boundary makes a model oscillate</span></div>
+      <div class="box new"><span class="lbl">the interface is the docstring</span>only the description travels to the API<span class="note">score bands, when-not-to-use, and the expansion rule live in prose</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">termination</span>natural: the model answers instead of calling<span class="note">recursion limit is the BACKSTOP, and hitting it is a bug signal</span></div>
+      <div class="box new"><span class="lbl">human in the loop</span><code>interrupt()</code> &#8594; approve / edit / revise<span class="note">revise routes back to think — the human steers the loop</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>This is the whole pass. <b>RAG is a noun, agentic is
+  a verb.</b><br><br><b>Query expansion came free.</b> Pipeline RAG bolts on an extra LLM call to
+  rewrite thin queries; here choosing the <code>query</code> argument <i>is</i> the rewrite.
+  <code>"cosy"</code> scored 0.08 and ranked noise; <code>"a warm gentle feel-good film for a rainy
+  evening"</code> scored 0.37. <b>Same corpus, 4&#215; the signal.</b><br><br>The cause was mine: my
+  docstring's own example <i>demonstrated compression</i> while the prose asked for expansion.
+  <b>Examples override instructions.</b><br><br>The interrupt's first live run cost six wasted cycles
+  arguing with a <b>display bug</b> — <code>textwrap.wrap()</code> silently ate the newlines the model
+  had correctly inserted. <b>A review surface that misrepresents the draft is worse than no review.</b>
+  </div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:170px">
+  <div class="tab"><div class="num">7</div><div class="nm">Serve</div><div class="sl">expose it</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>FastAPI &#183; POST /recommend<span class="note">retrieval only, no agent</span></div>
+      <div class="arrowr">+</div>
+      <div class="box new"><span class="lbl">new</span>/api/ask &#183; /api/resume &#183; a single HTML page<span class="note">tool + args + scores + evidence + review buttons</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">the interesting part</span>the pause survives the request ENDING<span class="note">200 returns, server idle, nothing held open</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b><code>api.py</code> holds <b>no agent logic</b> — it
+  imports the same compiled graph. If the two ever disagree, one is a bug.<br><br>A blocking prompt
+  could never span an HTTP request; a checkpointed interrupt does, and nothing had to be added to make
+  it work. <b>The UI paid for itself on the first query</b>, surfacing four defects that terminal
+  scrollback had buried.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:230px">
+  <div class="tab"><div class="num">8</div><div class="nm">Evaluate</div><div class="sl">is it any good?</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 1</span>golden set &#183; recall@3 &#183; quiet@3<span class="note">measures RETRIEVAL — cannot see the agent at all</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">exact</span>tool accuracy &#183; grounding<span class="note">a tool name is a string; grounding is a set difference</span></div>
+      <div class="box new"><span class="lbl">judged</span>RAGAS faithfulness<span class="note">over OpenRouter &#183; judge &#8800; model under test</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">leave-one-out</span><code>corpus_ablation.py</code><span class="note">"removing X hurts" &#8800; "adding X helped"</span></div>
+      <div class="box new"><span class="lbl">observability</span>LangSmith &#183; <code>@traceable</code> on the retriever<span class="note">LangChain traces itself; your own Python does not</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>The loop added three ways to be wrong that retrieval
+  evals structurally cannot see.<br><br><b>Only one metric gets an LLM.</b> Tool choice and grounding
+  have exact tests, so they are deterministic, free and cannot drift — the same rule as the search
+  tool, one level up.<br><br>Faithfulness scoring <b>0.44</b> looked like a failure and was the most
+  useful number of the pass: it caught that every <i>reason</i> the model gave was invented, while the
+  exact metrics said 6/6 because they only check <i>which films</i> were named.</div>
+</div>
+
+<h2 class="sec">What the pass actually bought — measured</h2>
+<div class="stage" style="min-height:0">
+  <div class="tab" style="border-radius:10px 0 0 10px"><div class="nm">Agent<br>metrics</div><div class="sl">6 cases, end to end</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">tool accuracy</span>6 / 6<span class="note">Nova Micro passed two-tool selection with no escalation</span></div>
+      <div class="box new"><span class="lbl">grounding</span>6 / 6<span class="note">named no film a tool had not returned</span></div>
+      <div class="box new"><span class="lbl">faithfulness</span>0.44<span class="note">&#8594; found the ungrounded-reasons bug</span></div>
+    </div>
+  </div>
+  <div class="why"><b>the shape of it</b>Perfect on everything exact, poor on the judged one. That gap
+  <i>is</i> the finding: identity was grounded, reasoning was not.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+<div class="stage" style="min-height:0">
+  <div class="tab" style="border-radius:10px 0 0 10px"><div class="nm">Corpus<br>worth</div><div class="sl">leave-one-out</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">remove plot</span>&#8722;3 answers<span class="note">the load-bearing corpus</span></div>
+      <div class="box"><span class="lbl">remove overview</span>&#8722;1</div>
+      <div class="box"><span class="lbl">remove derived</span>&#8722;1</div>
+      <div class="box new"><span class="lbl">remove genre</span>&#177;0<span class="note">deleted</span></div>
+    </div>
+  </div>
+  <div class="why"><b>the shape of it</b>Every corpus except the one added this pass is still earning
+  its place. <b>Removing is the only honest test of keeping.</b></div>
+</div>
+
+<h2 class="sec">Three lessons that outlive this codebase</h2>
+<div class="lineage" style="grid-template-columns:repeat(3,1fr)">
+  <div class="lin here"><div class="t">Layered blindness</div>Exact metrics missed the fake reasons. The <b>judge</b> caught those. The judge could never have caught Terminator&nbsp;2 at <b>0.536</b> — a <b>human</b> did. Each layer sees the one below's blind spot.</div>
+  <div class="lin here"><div class="t">Certainty &#8800; correctness</div>Both worst answers scored <i>above</i> every threshold. <b>A score says how sure the machine is, never whether it is right.</b></div>
+  <div class="lin here"><div class="t">Reproduce first</div>A 10-point jump that never came back. <b>Write the prediction before the run</b>, and never author the explanation for the number you preferred.</div>
+</div>
+
+<h2 class="sec">Where this sits</h2>
+<div class="lineage">
+  <div class="lin done"><div class="t">Pass 0 <small>done</small></div><b>Walking skeleton.</b> All 8 components crude and connected. 20 chunks, cosine top-5, one LLM call.</div>
+  <div class="lin done"><div class="t">Pass 1 <small>done</small></div><b>Depth, no new components.</b> 2nd source, hybrid chunking, reranking, real metric. <b>4/7 &#8594; 7/7.</b></div>
+  <div class="lin here"><div class="t">Pass 2 <small>you are here</small></div><b>Pipeline &#8594; loop.</b> LangGraph, ReAct, 2 tools, hard constraints, HITL, LangSmith, RAGAS, a web UI. Retrieval flat; correctness measured for the first time.</div>
+  <div class="lin next"><div class="t">Pass 3</div>A mood corpus (the standing weakness) &#183; swap the agent model through the seam &#183; BM25 + RRF &#183; genre column &#183; <code>hnsw</code> &#183; Databricks silver layer.</div>
+</div>
+
+<footer>MovieMotions &#183; Pass 2 architecture diagram &#183; read beside PASS-0-DIAGRAM.html and PASS-1-DIAGRAM.html &#183; tool accuracy 6/6 &#183; grounding 6/6 &#183; faithfulness 0.44</footer>
+
+</div></body></html>

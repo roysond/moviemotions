@@ -1,0 +1,56 @@
+# ─── Secrets ────────────────────────────────────────────────────
+# The whole reason this file exists. Never let a key reach GitHub.
+.env
+.env.*
+!.env.example
+
+# ─── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# ─── Testing & tooling caches ───────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ─── Notebooks ──────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ─── Local data ─────────────────────────────────────────────────
+data/raw/
+data/cache/
+*.sql
+!schema.sql
+*.dump
+
+# ─── Editor & OS noise ──────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# ─── Internal planning docs — not for public view ───────────────
+docs/roadmap.md
+docs/session-notes.md
+docs/groundwork.md
+
+# ─── Scratch ────────────────────────────────────────────────────
+_to_delete/
+scratch/
+
+.claude/settings.local.json
+# ─── Derived data — regenerable, keep the raw not the derived ────
+data/embeddings.json
+data/derived.json
+
+# ─── Internal docs, HTML twins (match the .md ignores above) ─────
+docs/SESSION-NOTES.html
+docs/ROADMAP.html
+docs/GROUNDWORK.html
+data/plots.json
+data/sentence_vectors.json

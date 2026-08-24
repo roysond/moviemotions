@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — Pass 1 · Depth on the Skeleton</title>
+<style>
+  :root{
+    --ink:#16242b; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f3f1eb; --card:#fff; --line:#d8d3c8;
+    --band:#eceadf;
+    --p0:#8a6d3b; --p0s:#faf4e8; --p0b:#e0cdaa;
+    --p1:#1c5f8f; --p1s:#e8f1f8; --p1b:#b4cee4;
+    --why:#5c4a72; --whys:#f2eef8; --whyb:#d8cbe8;
+    --new:#1e6b56; --news:#e2f0eb; --newb:#a8d3c5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 20px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:16px;margin-bottom:8px}
+  .badge{display:inline-block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+         font-weight:800;padding:4px 12px;border-radius:20px;color:#fff}
+  h1{font-size:29px;line-height:1.12;margin:10px 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--soft);font-size:14px;max-width:80ch}
+  .pairnote{margin-top:10px;background:var(--card);border:1px solid var(--line);
+            border-left:4px solid var(--ink);border-radius:0 10px 10px 0;padding:10px 14px;
+            font-size:13px;color:var(--soft)}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:16px 0 4px;font-size:12px;color:var(--soft)}
+  .legend i{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+
+  /* stage grid */
+  .stage{display:grid;grid-template-columns:96px 1fr 292px;gap:0;align-items:stretch;
+         min-height:132px;margin:0}
+  @media(max-width:900px){.stage{grid-template-columns:1fr}}
+  .tab{background:var(--band);border:1px solid var(--line);border-right:none;
+       border-radius:10px 0 0 10px;padding:12px 10px;display:flex;flex-direction:column;
+       justify-content:center;gap:4px;text-align:center}
+  .tab .num{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--muted);line-height:1}
+  .tab .nm{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+  .tab .sl{font-size:10.5px;color:var(--muted);font-weight:600}
+
+  .node{background:var(--card);border:1px solid var(--line);padding:13px 16px;
+        display:flex;flex-direction:column;justify-content:center;gap:7px}
+  .why{background:var(--whys);border:1px solid var(--whyb);border-left:none;
+       border-radius:0 10px 10px 0;padding:12px 14px;font-size:12.4px;line-height:1.5;
+       color:var(--why);display:flex;flex-direction:column;justify-content:center}
+  .why b{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+         margin-bottom:5px;opacity:.75}
+  @media(max-width:900px){
+    .tab{border-radius:10px 10px 0 0;border-right:1px solid var(--line);flex-direction:row;gap:9px}
+    .why{border-radius:0 0 10px 10px;border-left:1px solid var(--whyb)}
+  }
+
+  /* boxes inside a node */
+  .box{border:1.5px solid var(--p0b);background:var(--p0s);border-radius:7px;
+       padding:7px 11px;font-size:12.8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .box.new{border-color:var(--newb);background:var(--news)}
+  .box .lbl{font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;
+            font-family:inherit;color:var(--p0);display:block;margin-bottom:2px}
+  .box.new .lbl{color:var(--new)}
+  .box .note{display:block;font-family:ui-sans-serif,system-ui,sans-serif;
+             font-size:11.6px;color:var(--soft);margin-top:3px;line-height:1.45}
+  .rowbox{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+  .rowbox > .box{flex:1;min-width:150px}
+  .arrowr{align-self:center;color:var(--muted);font-size:15px;font-weight:700}
+
+  /* vertical connector */
+  .conn{height:26px;display:grid;grid-template-columns:96px 1fr 292px}
+  .conn div:nth-child(2){display:flex;align-items:center;justify-content:center;
+       color:var(--muted);font-size:15px;line-height:1}
+  @media(max-width:900px){.conn{grid-template-columns:1fr}.conn div:nth-child(1),.conn div:nth-child(3){display:none}}
+
+  h2.sec{font-size:17px;margin:34px 0 12px;letter-spacing:-.01em;
+         padding-bottom:7px;border-bottom:2px solid var(--ink)}
+
+  /* lineage strip */
+  .lineage{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:16px}
+  @media(max-width:760px){.lineage{grid-template-columns:1fr 1fr}}
+  .lin{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);font-size:12.2px}
+  .lin .t{font-size:10px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;margin-bottom:4px}
+  .lin.done{background:var(--p0s);border-color:var(--p0b)}
+  .lin.done .t{color:var(--p0)}
+  .lin.here{background:var(--p1s);border-color:var(--p1b);box-shadow:0 0 0 2px var(--p1b)}
+  .lin.here .t{color:var(--p1)}
+  .lin.next{opacity:.62}
+  .lin .t small{float:right;font-weight:700;letter-spacing:0;text-transform:none}
+
+  footer{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .badge{background:var(--p1)}
+</style></head>
+<body><div class="wrap">
+
+<header>
+  <span class="badge">Pass 1 · depth on the same skeleton</span>
+  <h1>Same eight components, same order — every one of them deeper</h1>
+  <div class="sub"><b>No new component was added.</b> That is what makes this pass <i>iterative</i>
+  rather than incremental: the shape is identical to Pass 0, the substance is not. Retrieval recall@3
+  went <b>4/7 &#8594; 7/7</b>.</div>
+  <div class="pairnote"><b>Read beside <code>PASS-0-DIAGRAM.html</code>.</b> Rows are in the same
+  order and same positions. <span style="color:var(--p0);font-weight:700">Sand boxes</span> are
+  carried over unchanged from Pass 0; <span style="color:var(--new);font-weight:700">green boxes</span>
+  are what this pass added.</div>
+  <div class="legend">
+    <span><i style="background:var(--p0s);border:1.5px solid var(--p0b)"></i>carried from Pass 0</span>
+    <span><i style="background:var(--news);border:1.5px solid var(--newb)"></i>added in Pass 1</span>
+    <span><i style="background:var(--whys);border:1.5px solid var(--whyb)"></i>why — and what it cost to learn</span>
+  </div>
+</header>
+
+<h2 class="sec">The pipeline, end to end</h2>
+
+<div class="stage">
+  <div class="tab"><div class="num">1</div><div class="nm">Ingest</div><div class="sl">get the data</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>TMDB API &#8594; data/raw/<span class="note">20 films, raw payload untouched</span></div>
+      <div class="arrowr">+</div>
+      <div class="box new"><span class="lbl">new source</span>Wikipedia plot sections<span class="note">~4,000 chars &#215; 20 films &#183; CC BY-SA 4.0</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">the join</span>IMDb id &#8594; Wikidata (P345) &#8594; article<span class="note">never by title — 2010 Karate Kid, not 1984</span></div>
+      <div class="box new"><span class="lbl">provenance</span>fidelity: verbatim | condensed<span class="note">records how good each record is, not just what it says</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>TMDB is rich in facts, poor in narrative — 348 chars
+  naming <i>zero</i> scenes. Wikipedia narrates 27.<br><br>Wikimedia <b>403'd the script</b> under its
+  robot policy; macOS Python had no CA bundle. Two records came back silently <i>summarised</i> — and
+  the film that later failed an eval case was one of them. <b>Ingestion can degrade data quietly;
+  record fidelity at write time.</b></div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">2</div><div class="nm">Curate</div><div class="sl">make it usable</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>overview<span class="note">the flat facts</span></div>
+      <div class="box new"><span class="lbl">new layer</span>derived<span class="note">Nova Micro writes feel / moods / themes</span></div>
+      <div class="box new"><span class="lbl">new layer</span>plot<span class="note">scene-by-scene narrative</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>Karate Kid never surfaced for "inspiring" — the film
+  is, the text isn't. So a model reads each overview and writes how it <i>feels</i>, at write time.<br><br>
+  First prompt put "coming of age" on 15 of 20 films: <b>examples in a prompt become the answer space.</b>
+  Banning "tense" produced "tension" six times — <b>a ban removes the word, not the pull toward it.</b>
+  And enrichment still couldn't fix Karate Kid, which proved the real need was a narrative source.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:210px">
+  <div class="tab"><div class="num">3</div><div class="nm">Embed</div><div class="sl">text &#8594; vectors</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>Nova 2 @ 1024d<span class="note">unchanged — the model was already right</span></div>
+      <div class="box new"><span class="lbl">1 &#183; semantic</span>embed every sentence, cut where meaning shifts<span class="note">threshold = 80th percentile of THIS plot's own shifts</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">2 &#183; recursive</span>over 900 chars &#8594; cut again at its own biggest shift<span class="note">the cap decides <i>whether</i>; meaning decides <i>where</i></span></div>
+      <div class="box new"><span class="lbl">3 &#183; overlap</span>stitch only the 39 size-forced seams<span class="note">not at semantic seams — meaning genuinely changed there</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">4 &#183; contextual header</span>"Finding Nemo (2003). ...his worrisome father Marlin..."<span class="note">prepended AFTER boundaries are set &#183; zero extra model calls</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>One vector over 4,000 chars averages 27 scenes into
+  mush.<br><br><b>Percentile, not a fixed threshold</b> — Nova's space is narrow (unrelated text
+  &#8776;0.64), so "split below 0.8" means something different in every document and dies on a model
+  swap.<br><br>The header is the breakthrough: a chunk saying <i>"Nemo swims to a speedboat and is
+  captured"</i> has no father, no son, no search. <b>Chunking preserves events and destroys
+  relationships.</b> This alone took case 1 from 1/3 to 3/3.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">4</div><div class="nm">Storage</div><div class="sl">where it lives</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>20 chunks<span class="note">1 per film</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box new"><span class="lbl">now</span>185 chunks<span class="note">20 overview &#183; 20 derived &#183; 145 plot</span></div>
+      <div class="box new"><span class="lbl">resilience</span>commit per film + SHA-1 vector cache<span class="note">a throttle costs time, never finished work</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>Three ingestion runs died to Bedrock throttling. The
+  fix isn't a bigger sleep — it's <b>self-pacing backoff</b> (grows on push-back, decays on success)
+  plus per-item commits and a cache keyed on <i>content</i>. Change the text, you pay; don't, you
+  don't. Same instinct as a LangGraph checkpointer, one layer down.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage" style="min-height:250px">
+  <div class="tab"><div class="num">5</div><div class="nm">Retrieve</div><div class="sl">find candidates</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>embed &#8594; cosine top 5<span class="note">this was the whole stage</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">a &#183; stratified candidates</span>plot 30 &#183; derived 10 &#183; overview 10<span class="note">each type ranked within its OWN kind</span></div>
+      <div class="arrowr">&#9660;</div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">b &#183; rerank</span>cross-encoder &#183; OpenRouter &#8594; Cohere v3.5<span class="note">reads query + chunk together &#183; wrapped in try/except</span></div>
+      <div class="arrowr">&#9660;</div>
+    </div>
+    <div class="rowbox">
+      <div class="box new"><span class="lbl">c &#183; aggregate per film</span>best + 2nd/2 + 3rd/3<span class="note">breadth of evidence beats one lucky scene</span></div>
+      <div class="arrowr">&#9660;</div>
+      <div class="box new"><span class="lbl">d &#183; collapse</span>one row per film &#8594; top 3<span class="note">small-to-big, done AFTER the judge has voted</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>Five measured failures, none found by reading code.<br><br>
+  <b>Adding 136 plot chunks changed nothing</b> — scores identical to 4 decimals. <code>DISTINCT ON</code>
+  collapsed to one chunk per film <i>in SQL</i>, and a 120-char mood blurb beat its own film's 600-char
+  scene every time. <b>An optimisation is only safe if it discards what the downstream component
+  wouldn't have wanted.</b><br><br>Widening the pool didn't help either: short abstract chunks win on
+  <i>concentration</i>, not relevance. <b>Chunk length is a confound — compare like with like.</b><br><br>
+  Reranker host: 3 AWS walls (Marketplace, region, IAM) &#8594; a gateway. Fine for public data,
+  a BAA liability for PHI.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">6</div><div class="nm">Reason</div><div class="sl">decide &amp; explain</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0 &#183; unchanged</span>one LLM call &#8594; strict JSON<span class="note">still a straight line, still not an agent</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why it did NOT change</b>The only component untouched by this pass — and the
+  honest gap. Next build turns this single call into a <b>loop</b>: LangGraph orchestration, a tool
+  registry, ReAct, a human-in-the-loop interrupt, LangSmith tracing. Pipeline &#8594; loop is the
+  difference between RAG and agentic.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">7</div><div class="nm">Serve</div><div class="sl">expose it</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>FastAPI &#183; POST /recommend</div>
+      <div class="arrowr">+</div>
+      <div class="box new"><span class="lbl">new</span>every result carries score + method<span class="note">"rerank" or "vector" — the answer says how it was made</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>Small but real: when the reranker is unreachable the system still answers,
+  and the output <i>says so</i>. <b>A vendor outage costs quality, never availability</b> — and the
+  consumer can tell which mode produced the answer.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">8</div><div class="nm">Evaluate</div><div class="sl">is it any good?</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0</span>5 queries, eyeballed</div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box new"><span class="lbl">golden set</span>eval_cases.json<span class="note">fixed answers = human ground truth, model-independent</span></div>
+      <div class="box new"><span class="lbl">metric</span>PASS n/m &#183; not a bare PASS<span class="note">plus WATCH for a known corpus gap</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why &#183; cost to learn</b>The eval reported "4 of 5 pass" before <i>and</i>
+  after a change that silently took one query from 3 correct answers to 1 — because the rule only
+  asked "did <i>any</i> right answer appear?" <b>A coarse metric doesn't just flatter a system, it
+  conceals decay.</b> Fractions made it visible. Caveat kept honest: 5 queries, 7 expected answers, is
+  a small sample — RAGAS is queued behind the agent.</div>
+</div>
+
+<h2 class="sec">What the pass actually bought — measured</h2>
+<div class="stage" style="min-height:0">
+  <div class="tab" style="border-radius:10px 0 0 10px"><div class="nm">Recall<br>@3</div><div class="sl">same 5 queries</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">pass 0 baseline</span>4 / 7<span class="note">vector only, 20 chunks</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box new"><span class="lbl">+ reranker</span>5 / 7</div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">+ plot corpus</span>4 / 7<span class="note">no effect — hidden by DISTINCT ON</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">+ reorder &amp; stratify</span>4 / 7</div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box new"><span class="lbl">+ contextual headers</span>7 / 7<span class="note">every case passing</span></div>
+    </div>
+  </div>
+  <div class="why"><b>the shape of it</b>Two of five changes moved the number. The corpus was never the
+  bottleneck — <b>the selection step was</b>, and only measuring <i>which chunk won</i> exposed it.</div>
+</div>
+
+<h2 class="sec">Where this sits</h2>
+<div class="lineage">
+  <div class="lin done"><div class="t">Pass 0 <small>done</small></div><b>Walking skeleton.</b> All 8 components crude and connected. 20 chunks, cosine top-5, one LLM call.</div>
+  <div class="lin here"><div class="t">Pass 1 <small>you are here</small></div><b>Depth, no new components.</b> 2nd source, hybrid chunking, reranking, real metric. <b>4/7 &#8594; 7/7.</b></div>
+  <div class="lin next"><div class="t">Pass 2</div>Agent loop &#183; BM25 + RRF &#183; query parsing &#183; knowledge graph as filter &#183; RAGAS &#183; privacy &amp; governance.</div>
+  <div class="lin next"><div class="t">Pass 3+</div>Managed-service comparison, semantic caching, multi-tenancy, Kubernetes.</div>
+</div>
+
+<footer>MovieMotions &#183; Pass 1 architecture diagram &#183; read beside PASS-0-DIAGRAM.html &#183; recall@3 4/7 &#8594; 7/7</footer>
+</div></body></html>

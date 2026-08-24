@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — Pass 0 · The Walking Skeleton</title>
+<style>
+  :root{
+    --ink:#16242b; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f3f1eb; --card:#fff; --line:#d8d3c8;
+    --band:#eceadf;
+    --p0:#8a6d3b; --p0s:#faf4e8; --p0b:#e0cdaa;
+    --p1:#1c5f8f; --p1s:#e8f1f8; --p1b:#b4cee4;
+    --why:#5c4a72; --whys:#f2eef8; --whyb:#d8cbe8;
+    --new:#1e6b56; --news:#e2f0eb; --newb:#a8d3c5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 20px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:16px;margin-bottom:8px}
+  .badge{display:inline-block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+         font-weight:800;padding:4px 12px;border-radius:20px;color:#fff}
+  h1{font-size:29px;line-height:1.12;margin:10px 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--soft);font-size:14px;max-width:80ch}
+  .pairnote{margin-top:10px;background:var(--card);border:1px solid var(--line);
+            border-left:4px solid var(--ink);border-radius:0 10px 10px 0;padding:10px 14px;
+            font-size:13px;color:var(--soft)}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:16px 0 4px;font-size:12px;color:var(--soft)}
+  .legend i{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+
+  /* stage grid */
+  .stage{display:grid;grid-template-columns:96px 1fr 292px;gap:0;align-items:stretch;
+         min-height:132px;margin:0}
+  @media(max-width:900px){.stage{grid-template-columns:1fr}}
+  .tab{background:var(--band);border:1px solid var(--line);border-right:none;
+       border-radius:10px 0 0 10px;padding:12px 10px;display:flex;flex-direction:column;
+       justify-content:center;gap:4px;text-align:center}
+  .tab .num{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--muted);line-height:1}
+  .tab .nm{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+  .tab .sl{font-size:10.5px;color:var(--muted);font-weight:600}
+
+  .node{background:var(--card);border:1px solid var(--line);padding:13px 16px;
+        display:flex;flex-direction:column;justify-content:center;gap:7px}
+  .why{background:var(--whys);border:1px solid var(--whyb);border-left:none;
+       border-radius:0 10px 10px 0;padding:12px 14px;font-size:12.4px;line-height:1.5;
+       color:var(--why);display:flex;flex-direction:column;justify-content:center}
+  .why b{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+         margin-bottom:5px;opacity:.75}
+  @media(max-width:900px){
+    .tab{border-radius:10px 10px 0 0;border-right:1px solid var(--line);flex-direction:row;gap:9px}
+    .why{border-radius:0 0 10px 10px;border-left:1px solid var(--whyb)}
+  }
+
+  /* boxes inside a node */
+  .box{border:1.5px solid var(--p0b);background:var(--p0s);border-radius:7px;
+       padding:7px 11px;font-size:12.8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .box.new{border-color:var(--newb);background:var(--news)}
+  .box .lbl{font-size:9px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;
+            font-family:inherit;color:var(--p0);display:block;margin-bottom:2px}
+  .box.new .lbl{color:var(--new)}
+  .box .note{display:block;font-family:ui-sans-serif,system-ui,sans-serif;
+             font-size:11.6px;color:var(--soft);margin-top:3px;line-height:1.45}
+  .rowbox{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+  .rowbox > .box{flex:1;min-width:150px}
+  .arrowr{align-self:center;color:var(--muted);font-size:15px;font-weight:700}
+
+  /* vertical connector */
+  .conn{height:26px;display:grid;grid-template-columns:96px 1fr 292px}
+  .conn div:nth-child(2){display:flex;align-items:center;justify-content:center;
+       color:var(--muted);font-size:15px;line-height:1}
+  @media(max-width:900px){.conn{grid-template-columns:1fr}.conn div:nth-child(1),.conn div:nth-child(3){display:none}}
+
+  h2.sec{font-size:17px;margin:34px 0 12px;letter-spacing:-.01em;
+         padding-bottom:7px;border-bottom:2px solid var(--ink)}
+
+  /* lineage strip */
+  .lineage{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:16px}
+  @media(max-width:760px){.lineage{grid-template-columns:1fr 1fr}}
+  .lin{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);font-size:12.2px}
+  .lin .t{font-size:10px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;margin-bottom:4px}
+  .lin.done{background:var(--p0s);border-color:var(--p0b)}
+  .lin.done .t{color:var(--p0)}
+  .lin.here{background:var(--p1s);border-color:var(--p1b);box-shadow:0 0 0 2px var(--p1b)}
+  .lin.here .t{color:var(--p1)}
+  .lin.next{opacity:.62}
+  .lin .t small{float:right;font-weight:700;letter-spacing:0;text-transform:none}
+
+  footer{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .badge{background:var(--p0)}
+</style></head>
+<body><div class="wrap">
+
+<header>
+  <span class="badge">Pass 0 · the walking skeleton</span>
+  <h1>Every component exists and connects — each one the dumbest thing that works</h1>
+  <div class="sub">One source, one chunk per film, cosine similarity, one LLM call, five eyeballed
+  queries. Nothing here is good. Everything here is <b>connected</b>, which is the only property
+  Pass 0 is trying to have.</div>
+  <div class="pairnote"><b>Read beside <code>PASS-1-DIAGRAM.html</code>.</b> Both diagrams use the
+  same eight rows in the same order, so anything that changed shows up as a difference in the same
+  place on the page. Green boxes in the Pass&nbsp;1 diagram are additions to this skeleton.</div>
+  <div class="legend">
+    <span><i style="background:var(--p0s);border:1.5px solid var(--p0b)"></i>built in Pass 0</span>
+    <span><i style="background:var(--whys);border:1.5px solid var(--whyb)"></i>why it was decided that way</span>
+  </div>
+</header>
+
+<h2 class="sec">The pipeline, end to end</h2>
+
+<div class="stage">
+  <div class="tab"><div class="num">1</div><div class="nm">Ingest</div><div class="sl">get the data</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">source</span>TMDB API<span class="note">20 films, matched by title + year</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">landing</span>data/raw/tmdb_*.json<span class="note">the API response, byte for byte, unmodified</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b><b style="opacity:1;font-size:11px;letter-spacing:0;text-transform:none;margin:0 0 4px">Keep the raw thing; derive everything else from it.</b>
+  Every future extraction — a graph, new fields, a different curation — comes from this file, with no
+  re-fetch from an API you don't control. One source only, because you must <i>feel</i> shallow
+  retrieval fail before enrichment means anything.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">2</div><div class="nm">Curate</div><div class="sl">make it usable</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">flatten</span>title + overview + genres<span class="note">no enrichment, no dedupe, no conflict handling</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">table</span>movies<span class="note">id · source · source_id · fetched_at · raw_payload</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>A field earns a column only when something must filter, sort, join or look
+  it up — everything else stays in <code>raw_payload</code>. <code>UNIQUE(source, source_id)</code>
+  means the <i>database</i> prevents duplicates, not your code remembering to check.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">3</div><div class="nm">Embed</div><div class="sl">text &#8594; vectors</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">chunking</span>1 film = 1 chunk<span class="note">no chunking strategy at all — deliberately</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">model</span>Nova 2 Multimodal @ 1024d<span class="note">benchmarked against Titan on 5 real queries</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>Dimension is a <i>property of the model</i>, not a dial — and more isn't
+  "safer", embeddings have no overflow. 1024 sits inside pgvector's 2,000-dim index cap. Measured, not
+  assumed: Nova's baseline similarity is 0.642 vs Titan's 0.126 — a narrow space, which matters later.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">4</div><div class="nm">Storage</div><div class="sl">where it lives</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">engine</span>Postgres + pgvector<span class="note">one database for vectors, keywords and graph</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">grain</span>chunks &#8226; chunk_embeddings<span class="note">chunk vs chunk &#215; model — split after a 40-row bug</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>Storing text once per model duplicated it. Splitting the tables fixed the
+  <b>grain</b> — what one row represents — and incidentally made champion-vs-challenger possible:
+  <code>UNIQUE(chunk_id, model_id)</code> lets two models' vectors sit side by side.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">5</div><div class="nm">Retrieve</div><div class="sl">find candidates</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">query</span>embed(text)</div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">search</span>cosine similarity<span class="note">ORDER BY embedding &lt;=&gt; query</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">result</span>top 5 films<span class="note">semantic only — no keywords, no rerank, no filter</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>Crude on purpose. Two facts learned here shaped all of Pass 1: semantic
+  search <i>always returns something</i> (there is no "nothing matches"), and a similarity score is
+  meaningless without the corpus baseline. Also: a single vector loses relationships — The Hangover
+  matched "creatures chasing people" because it has a tiger in a bathroom.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">6</div><div class="nm">Reason</div><div class="sl">decide &amp; explain</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">call</span>one LLM call<span class="note">"here are 5 candidates, pick 3, explain why"</span></div>
+      <div class="arrowr">&#9656;</div>
+      <div class="box"><span class="lbl">output</span>strict JSON<span class="note">never prose you have to parse</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>A straight line, <b>not</b> an agent — on purpose. This is a
+  <i>pipeline</i>: you can draw it before the query arrives. Building it first is how you'll feel the
+  difference when it becomes a <i>loop</i> in a later pass, instead of being told.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">7</div><div class="nm">Serve</div><div class="sl">expose it</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">api</span>FastAPI &#183; POST /recommend<span class="note">tested in the auto-generated docs page — no UI</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>The exit condition for the whole pass is a human typing a sentence into a
+  form and getting three films back with reasons. It doesn't have to be good. It has to work.</div>
+</div>
+<div class="conn"><div></div><div>&#9660;</div><div></div></div>
+
+<div class="stage">
+  <div class="tab"><div class="num">8</div><div class="nm">Evaluate</div><div class="sl">is it any good?</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box"><span class="lbl">method</span>5 hand-written queries<span class="note">eyeballed — no scoring, no automation, no record</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why</b>Good enough to notice something is wrong, not good enough to prove
+  anything. Turning this into a real metric is a Pass 1 job — and the first thing it did was catch a
+  regression this version couldn't see.</div>
+</div>
+
+<h2 class="sec">The seven things that had to be right even here</h2>
+<div class="stage" style="min-height:0">
+  <div class="tab" style="border-radius:10px 0 0 10px"><div class="nm">Non-<br>negotiable</div><div class="sl">retrofit = redo everything</div></div>
+  <div class="node">
+    <div class="rowbox">
+      <div class="box" style="min-width:120px"><span class="lbl">1</span>record identity<span class="note">source, source_id, fetched_at, content_version</span></div>
+      <div class="box" style="min-width:120px"><span class="lbl">2</span>raw payload kept<span class="note">derive everything, re-fetch nothing</span></div>
+      <div class="box" style="min-width:120px"><span class="lbl">3</span>secrets in .env<span class="note">gitignored from the first commit</span></div>
+    </div>
+    <div class="rowbox">
+      <div class="box" style="min-width:120px"><span class="lbl">4</span>MovieDataSource<span class="note">a second source is coming</span></div>
+      <div class="box" style="min-width:120px"><span class="lbl">5</span>EmbeddingProvider<span class="note">swapping means re-embedding everything</span></div>
+      <div class="box" style="min-width:120px"><span class="lbl">6</span>LLMProvider<span class="note">model + vendor as config</span></div>
+      <div class="box" style="min-width:120px"><span class="lbl">7</span>Retriever<span class="note">strategy swappable without touching callers</span></div>
+    </div>
+  </div>
+  <div class="why"><b>why these only</b>Everything else is allowed to be embarrassing on the first
+  attempt. These seven aren't, because retrofitting any of them means reprocessing everything already
+  built.</div>
+</div>
+
+<h2 class="sec">Where this sits</h2>
+<div class="lineage">
+  <div class="lin here"><div class="t">Pass 0 <small>you are here</small></div><b>Walking skeleton.</b> All 8 components exist, crude and connected. 20 chunks, cosine top-5, one LLM call.</div>
+  <div class="lin next"><div class="t">Pass 1</div>Depth on all 8. Second source, hybrid chunking, reranking, a real metric. <b>Recall 4/7 &#8594; 7/7.</b></div>
+  <div class="lin next"><div class="t">Pass 2</div>The real world — agent loop, tools, knowledge graph, BM25 + RRF, governance, privacy.</div>
+  <div class="lin next"><div class="t">Pass 3+</div>Augmentation — managed-service comparison, semantic caching, multi-tenancy, K8s.</div>
+</div>
+
+<footer>MovieMotions &#183; Pass 0 architecture diagram &#183; read beside PASS-1-DIAGRAM.html</footer>
+</div></body></html>

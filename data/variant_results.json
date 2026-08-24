@@ -1,0 +1,26 @@
+{
+  "A  no header anywhere": {
+    "recall": 0.7586206896551724,
+    "hits": 22,
+    "expected": 29,
+    "quiet": 0.20609999999999998
+  },
+  "B  header everywhere": {
+    "recall": 0.896551724137931,
+    "hits": 26,
+    "expected": 29,
+    "quiet": 0.25433333333333336
+  },
+  "C  header at rerank only": {
+    "recall": 0.8275862068965517,
+    "hits": 24,
+    "expected": 29,
+    "quiet": 0.2754
+  },
+  "D  header in index only": {
+    "recall": 0.8620689655172413,
+    "hits": 25,
+    "expected": 29,
+    "quiet": 0.22316666666666665
+  }
+}

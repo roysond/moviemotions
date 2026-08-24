@@ -1,0 +1,78 @@
+[
+  {
+    "id": 1,
+    "query": "tell me about Predator",
+    "answer": "Here's what I found on Predator:\n\nPredator (1987) is a 107-minute film where a team of elite commandos on a secret mission in a Central American jungle find themselves hunted by an extraterrestrial warrior.",
+    "tool_ok": true,
+    "tool_called": "lookup_film",
+    "tool_expected": "lookup_film",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "Predator"
+    ]
+  },
+  {
+    "id": 2,
+    "query": "I want something where creatures are hunting people, really tense",
+    "answer": "Predator is a good fit because it's a tense, thrilling film where dangerous creatures hunt and kill people. Terminator 2: Judgment Day is also tense, featuring a high-stakes chase between humans and a relentless machine.",
+    "tool_ok": true,
+    "tool_called": "search_films",
+    "tool_expected": "search_films",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "Terminator 2: Judgment Day",
+      "Predator"
+    ]
+  },
+  {
+    "id": 3,
+    "query": "do you have The Godfather?",
+    "answer": "I don't have \"The Godfather\" in my catalogue. If you need information on another film, just let me know!",
+    "tool_ok": true,
+    "tool_called": "lookup_film",
+    "tool_expected": "lookup_film",
+    "ungrounded": [],
+    "missing": [],
+    "named": []
+  },
+  {
+    "id": 4,
+    "query": "a man wrongly imprisoned who never gives up",
+    "answer": "The top result for \"a man wrongly imprisoned who never gives up and fights for his freedom\" is *The Shawshank Redemption* (1994). It's a powerful story about hope and perseverance, following the journey of a man wrongly imprisoned who never gives up. \n\n*Rocky* (1976) also fits somewhat, but it's not as strong a match. \n\nNothing else in the catalogue fits this description well.",
+    "tool_ok": true,
+    "tool_called": "search_films",
+    "tool_expected": "search_films",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "The Shawshank Redemption",
+      "Rocky"
+    ]
+  },
+  {
+    "id": 5,
+    "query": "do you have a documentary about climate change?",
+    "answer": "I don't have anything like a documentary about climate change in my catalogue.",
+    "tool_ok": true,
+    "tool_called": "search_films",
+    "tool_expected": "search_films",
+    "ungrounded": [],
+    "missing": [],
+    "named": []
+  },
+  {
+    "id": 6,
+    "query": "how long is Titanic?",
+    "answer": "\"Titanic\" is a 1997 film that runs for 194 minutes. It tells the story of Rose DeWitt Bukater, who recounts her experiences aboard the Titanic 84 years later. The film covers the ship's departure and its tragic sinking on its first voyage on April 15, 1912.",
+    "tool_ok": true,
+    "tool_called": "lookup_film",
+    "tool_expected": "lookup_film",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "Titanic"
+    ]
+  }
+]

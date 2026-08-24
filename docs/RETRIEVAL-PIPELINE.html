@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retrieval Pipeline — the full shape</title>
+<style>
+  :root{
+    --ink:#17262c; --soft:#4a616b; --muted:#7d919a;
+    --paper:#f2f0ea; --card:#fff; --line:#d7d2c7;
+    --gate:#a35a18; --gates:#f9efe3;
+    --vec:#2c5f8f; --vecs:#e5edf4;
+    --key:#1e6b56; --keys:#e3f0ec;
+    --fuse:#8a5a1a; --fuses:#f6ecdd;
+    --rank:#96305a; --ranks:#f9e8ef;
+    --out:#2d6a4f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 20px 70px}
+  header{border-bottom:3px solid var(--ink);padding-bottom:18px;margin-bottom:26px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--gate);font-weight:700}
+  h1{font-size:30px;line-height:1.15;margin:8px 0 8px;letter-spacing:-.02em}
+  .sub{font-size:15.5px;color:var(--soft);margin:0;max-width:64ch}
+
+  .flow{display:flex;flex-direction:column;align-items:center;gap:0}
+  .stage{width:100%;max-width:660px;border-radius:14px;padding:16px 20px;position:relative;
+         border:1px solid var(--line);background:var(--card)}
+  .stage .tag{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.1em;
+              text-transform:uppercase;color:#fff;border-radius:5px;padding:3px 9px;margin-bottom:8px}
+  .stage h3{margin:0 0 4px;font-size:17px;letter-spacing:-.01em}
+  .stage p{margin:5px 0 0;font-size:13.8px;color:var(--soft);line-height:1.5}
+  .stage .io{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+             background:#f0ede6;border-radius:6px;padding:6px 10px;margin-top:9px;color:var(--ink)}
+  code{background:#eae6de;border-radius:4px;padding:1px 5px;font-size:12.5px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  .arrow{width:2px;height:26px;background:var(--muted);position:relative}
+  .arrow::after{content:"";position:absolute;bottom:-1px;left:-4px;
+                border-left:5px solid transparent;border-right:5px solid transparent;
+                border-top:7px solid var(--muted)}
+  .arrow.lbl{height:40px}
+  .arrow .txt{position:absolute;left:12px;top:50%;transform:translateY(-50%);
+              font-size:11.5px;color:var(--muted);white-space:nowrap;font-style:italic}
+
+  .fork{display:flex;gap:18px;width:100%;max-width:660px}
+  .fork .stage{flex:1}
+  .split{width:100%;max-width:660px;display:flex;justify-content:space-around;height:24px;position:relative}
+  .split::before{content:"";position:absolute;top:0;left:25%;right:25%;height:2px;background:var(--muted)}
+  .split .leg{width:2px;background:var(--muted);height:24px;position:relative}
+  .split .leg::after{content:"";position:absolute;bottom:-1px;left:-4px;
+                border-left:5px solid transparent;border-right:5px solid transparent;
+                border-top:7px solid var(--muted)}
+  .merge{width:100%;max-width:660px;display:flex;justify-content:space-around;height:24px;position:relative}
+  .merge::after{content:"";position:absolute;bottom:0;left:25%;right:25%;height:2px;background:var(--muted)}
+  .merge .leg{width:2px;background:var(--muted);height:24px}
+
+  .note{max-width:660px;width:100%;font-size:12.5px;color:var(--soft);
+        background:var(--card);border:1px dashed var(--line);border-radius:10px;
+        padding:9px 13px;margin-top:8px}
+  .note b{color:var(--ink)}
+
+  .status{max-width:660px;margin:34px auto 0;background:#fdf3e8;border:1px solid #eac9a4;
+          border-left:4px solid var(--gate);border-radius:0 12px 12px 0;padding:15px 19px;font-size:14px;color:var(--soft)}
+  .status b{color:var(--gate)}
+  .built{color:var(--out);font-weight:700}
+  .todo{color:var(--gate);font-weight:700}
+  footer{max-width:660px;margin:30px auto 0;font-size:12px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · Retrieval</div>
+  <h1>The full retrieval pipeline</h1>
+  <p class="sub">Five stages. Each one receives something, does one job, and passes something on. Read the coloured tag on each box: <b>gate</b>, <b>retrieve</b>, <b>fuse</b>, <b>reorder</b>, <b>return</b>.</p>
+</header>
+
+<div class="flow">
+
+  <!-- QUERY -->
+  <div class="stage" style="border-color:var(--ink);border-width:2px">
+    <h3>User query</h3>
+    <div class="io">"something with creatures chasing you, Denzel, under 2 hours"</div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <!-- PARSE -->
+  <div class="stage" style="background:var(--gates);border-color:#e6cba6">
+    <span class="tag" style="background:var(--gate)">Stage 0 · Parse</span>
+    <h3>Split the query into two kinds of thing</h3>
+    <p>An LLM reads the sentence and separates the <b>hard constraints</b> (facts that are non-negotiable) from the <b>soft meaning</b> (the mood to search on). This is the query-parsing step — extraction, not inference.</p>
+    <div class="io">hard  → { actor: "Denzel Washington", max_runtime: 120 }<br>soft  → "creatures chasing you, intense"</div>
+  </div>
+
+  <div class="arrow lbl"><span class="txt">the hard facts become a filter ↓ &nbsp;&nbsp; the soft text becomes the search ↓</span></div>
+
+  <!-- FILTER -->
+  <div class="stage" style="background:var(--gates);border-color:#e6cba6">
+    <span class="tag" style="background:var(--gate)">Stage 1 · Metadata filter — THE GATE</span>
+    <h3>Throw out everything that breaks a hard rule, before searching</h3>
+    <p>A plain SQL <code>WHERE</code>. No Denzel? Over 2 hours? Gone — never even considered. This shrinks 20 films (later: thousands) down to only the <b>eligible</b> ones. Runs <b>first</b> because a hard constraint is a guarantee, and because searching a smaller set is faster and more accurate.</p>
+    <div class="io">candidate set = films WHERE 'Denzel Washington' = ANY(cast)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;AND runtime_minutes &lt;= 120</div>
+  </div>
+  <div class="note"><b>Why the gate is first, not last.</b> Filtering <i>after</i> ranking wastes work ranking films you'll only delete — and risks the top 3 being all ineligible. Enforce the non-negotiables, then rank what survives.</div>
+
+  <div class="arrow"></div>
+
+  <!-- KNOWLEDGE GRAPH -->
+  <div class="stage" style="background:#efe8f2;border-color:#d3bcdd">
+    <span class="tag" style="background:#6b3d84">Stage 1b · Knowledge graph — A SMARTER GATE</span>
+    <h3>Filter by <i>relationships</i>, not just attributes</h3>
+    <p>The metadata gate asks "does this film have property X?" The graph asks "do two entities <b>relate</b> the way the query needs?" It stores typed edges between things — a creature that <b>hunts</b> a human is a different edge from a creature that is a <b>pet</b>. Same position as Stage 1 (a gate that narrows), more expressive power (relationships, not flat facts).</p>
+    <div class="io">query needs:  creature —HUNTS→ human<br><br>Predator      creature —HUNTS→ human      ✓ keep<br>Jurassic Park creature —HUNTS→ human      ✓ keep<br>Alien         creature —HUNTS→ human      ✓ keep<br>The Hangover  tiger —IS_PET→ (comedy)      ✗ DROP</div>
+  </div>
+  <div class="note"><b>This is the tiger fix.</b> "Creatures chasing you" wrongly returned <b>The Hangover</b> because its blurb says "a tiger in the bathroom" — the vector knew a creature was <i>mentioned</i> but not its <i>role</i>. The graph drops it <b>here, at the gate</b>, so it never even reaches the searches below. A vector matches entities that are mentioned; a graph matches entities that <b>relate the same way</b>.</div>
+
+  <!-- THE ARENA -->
+  <div class="stage" style="background:#fbfaf7;border:2px dashed var(--muted);text-align:center">
+    <span class="tag" style="background:var(--muted)">The candidate set — "the arena"</span>
+    <h3 style="margin-bottom:2px">{ Predator, Jurassic Park, Alien }</h3>
+    <p style="margin-top:4px">This narrowed set is what <b>stays fixed</b> while the two searches run. The graph drew these walls; both searches below operate only inside them. The graph's job is done — it does not rank, and it does not enter the fusion.</p>
+  </div>
+
+  <!-- SPLIT into two lanes -->
+  <div class="split"><div class="leg"></div><div class="leg"></div></div>
+
+  <div class="fork">
+    <!-- VECTOR -->
+    <div class="stage" style="background:var(--vecs);border-color:#bcd0e2">
+      <span class="tag" style="background:var(--vec)">Stage 2a · Vector search</span>
+      <h3>Match by <i>meaning</i></h3>
+      <p>Embed the soft text into a vector, compare with cosine against the candidate films' vectors. Links "creatures" to "dinosaur" even though the words differ.</p>
+      <div class="io">list A (ranked):<br>1 Predator<br>2 Jurassic Park<br>3 Alien</div>
+    </div>
+    <!-- BM25 -->
+    <div class="stage" style="background:var(--keys);border-color:#bcdccf">
+      <span class="tag" style="background:var(--key)">Stage 2b · Keyword / BM25</span>
+      <h3>Match by <i>literal words</i></h3>
+      <p>Scores how well the query's actual words hit the same <code>content</code> text — no embedding. Catches exact names and terms a vector blurs. (Little to bite on at 20 blurbs; earns its keep with reviews.)</p>
+      <div class="io">list B (ranked):<br>1 Alien<br>2 Predator<br>3 Get Out</div>
+    </div>
+  </div>
+  <div class="note"><b>The two lists' scores are NOT comparable.</b> Cosine ~0.6 and a BM25 score of 14.2 live on different scales — exactly the finding from <code>space_shape.py</code>. That is <i>why</i> the next stage fuses on rank, not score.</div>
+
+  <!-- MERGE -->
+  <div class="merge"><div class="leg"></div><div class="leg"></div></div>
+
+  <!-- RRF -->
+  <div class="stage" style="background:var(--fuses);border-color:#e2cfa8">
+    <span class="tag" style="background:var(--fuse)">Stage 3 · Reciprocal Rank Fusion</span>
+    <h3>Merge the two lists into one — using position, not score</h3>
+    <p>Throw the scores away. Keep only <b>where each film ranked</b> in each list. A film scores <code>1/(60 + rank)</code> for every list it appears in; add those up; re-sort. A film that both methods liked rises; a film only one liked still gets a fair shot. Dedupe to one row per film here.</p>
+    <div class="io">Predator: 1/(60+1) + 1/(60+2) = 0.0325  → #1<br>Alien&nbsp;&nbsp;&nbsp;: 1/(60+3) + 1/(60+1) = 0.0323  → #2<br>fused list → top 10 kept</div>
+  </div>
+  <div class="note"><b>RRF fuses the two RETRIEVERS — not the graph.</b> Vector and BM25 each produced a ranked list, so there are two scorecards to merge. The graph produced no scorecard; it set the boundary. So the count is: <b>one filter (graph) → two searches fused (vector + BM25) → one list.</b> RRF needs two lists to exist, which is why it can't run in your system yet — you have only the vector lane today.</div>
+
+  <div class="arrow lbl"><span class="txt">top 10 candidates ↓ (small enough to afford the expensive step)</span></div>
+
+  <!-- RERANK -->
+  <div class="stage" style="background:var(--ranks);border-color:#e5c0d1">
+    <span class="tag" style="background:var(--rank)">Stage 4 · Reranker</span>
+    <h3>Re-read query + each film <i>together</i>, and reorder</h3>
+    <p>Stages 2–3 compared two things made <i>separately</i>. A reranker (cross-encoder) reads the query and one film's text <b>at the same time</b> and asks "is THIS actually about creatures chasing you?" — the only genuinely trustworthy relevance score in the pipeline. Costly, so it runs on just the top 10, never the whole corpus.</p>
+    <div class="io">reorders the 10 → Predator, Jurassic Park, Alien, …</div>
+  </div>
+  <div class="note"><b>This is the one that fixes your <code>1/3</code> problem.</b> Jurassic Park and Alien, buried by the mood chunks, get re-read against the query and pulled back up. Reranking needs <b>no second list</b> — which is why it's the first thing to build.</div>
+
+  <div class="arrow"></div>
+
+  <!-- OUTPUT -->
+  <div class="stage" style="border-color:var(--out);border-width:2px">
+    <span class="tag" style="background:var(--out)">Stage 5 · Return</span>
+    <h3>Top 3 to the user</h3>
+    <div class="io">Predator · Jurassic Park · Alien</div>
+  </div>
+
+</div>
+
+<div class="note" style="max-width:660px;margin:34px auto 0;border-style:solid;border-color:#c9b6d6;background:#f6f1f8">
+  <b style="color:#6b3d84;font-size:14px">How the three relate — together, alone, or in pairs?</b><br><br>
+  <b>The graph works ALONE, and first.</b> It's a filter. It narrows 20 films to an eligible set and then steps back. It does not rank, and it does not fuse. (Its output is a <i>set</i>, not a list.)<br><br>
+  <b>Vector and BM25 work as a PAIR.</b> Both search the same narrowed set, each producing a ranked list — one by meaning, one by literal words.<br><br>
+  <b>RRF fuses that pair — two lists, not three.</b> The graph isn't in the fusion because it never made a scorecard. So the shape is: <b>1 filter → 2 searches → fuse the 2 → rerank → return.</b><br><br>
+  <i>Advanced footnote (GraphRAG):</i> you <i>can</i> also let the graph <b>retrieve</b> — walk from the Denzel node to his films to similar themes — which makes it a <i>third</i> ranked list, and then RRF fuses all three. But that's the graph doing a second, harder job. Its clean primary role, the one that matches "a graph is a filter, not a ranker," is the gate above.
+</div>
+
+<div class="status">
+  <b>Where MovieMotions actually is right now.</b><br><br>
+  Stage 1 metadata gate — <span class="todo">not built</span> (no query parsing yet)<br>
+  Stage 1b knowledge graph — <span class="todo">not built</span> (overkill at 20 films; a real point at scale)<br>
+  Stage 2a vector — <span class="built">built</span><br>
+  Stage 2b BM25 — <span class="todo">not built</span><br>
+  Stage 3 RRF — <span class="todo">not built</span> (nothing to fuse until 2b exists)<br>
+  Stage 4 reranker — <span class="todo">not built</span> ← <b>the highest-value next step; needs no second list</b><br>
+  Stage 5 return — <span class="built">built</span> (with the one-row-per-film dedupe)<br><br>
+  So today you run: <b>Stage 2a → dedupe → Stage 5.</b> Everything else is the roadmap.
+</div>
+
+<footer>MovieMotions · Retrieval pipeline · 18 August 2026</footer>
+
+</div>
+</body>
+</html>
