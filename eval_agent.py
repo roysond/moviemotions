@@ -51,7 +51,38 @@ from core import DATABASE_URL  # noqa: E402
 
 load_dotenv()
 
-JUDGE_MODEL = os.environ.get("RAGAS_JUDGE_MODEL", "google/gemini-3.5-flash-lite")
+# The judge must NEVER be the model under test — a model asked to grade its own
+# output grades generously. Set RAGAS_JUDGE_MODEL in .env to change it.
+#
+# CHANGING THE JUDGE VOIDS THE SCORE. Faithfulness is one model's opinion of
+# another's answer. A new judge gives a different number on identical answers,
+# and that difference measures the judge, not the system. Re-baseline, never
+# compare across judges.
+JUDGE_MODEL = os.environ.get("RAGAS_JUDGE_MODEL", "openai/gpt-5.6-luna")
+
+# IncompleteOutputException means the judge's reply was CUT OFF before its structured
+# output closed — a token ceiling, not a quality problem. It hit case 4 (the longest
+# answer) on two different judges, which is what ruled out "that model is bad".
+JUDGE_MAX_TOKENS = 4096
+
+# A judge at default temperature gives a different verdict on identical text. Measured:
+# two runs of the same code scored 0.88 and 0.85. Pinning it to 0 removes the judge's
+# own variance, so any movement left is the AGENT changing — which is the thing we are
+# actually trying to measure.
+JUDGE_TEMPERATURE = 0
+
+# ...except it does not, and this is the finding that matters most about this metric.
+# Measured: the SAME frozen answers, judged three times at temperature 0, scored
+# 0.87 / 0.75 / 0.79, with one case landing on 0.67, 0.33 and 0.50 — exactly 2/3, 1/3
+# and 1/2. RAGAS faithfulness first DECOMPOSES an answer into atomic claims, then checks
+# each against the context, and scores supported/total. The decomposition is itself an
+# LLM call, so the DENOMINATOR moves before any judging happens. Temperature cannot fix
+# a different question being asked each time.
+#
+# A single draw from that distribution is not a measurement. So judge every case several
+# times and report the spread alongside the mean. Slower and a few tenths of a cent more
+# expensive; the alternative is a number that invites conclusions it cannot support.
+JUDGE_REPEATS = int(os.environ.get("RAGAS_JUDGE_REPEATS", "3"))
 OPENROUTER = "https://openrouter.ai/api/v1"
 
 # `tool` is the tool we expect to be chosen. `expect` lists films that SHOULD be named in
@@ -101,7 +132,13 @@ def mentioned(answer, titles):
 
 
 async def faithfulness_scores(rows):
-    """RAGAS faithfulness over OpenRouter. Returns {case_id: score} or {} if unavailable."""
+    """RAGAS faithfulness over OpenRouter.
+
+    Returns (scores, failed) where scores is {case_id: score} and failed is a list of
+    (case_id, reason). A judge that errors must NEVER just vanish: dropping it shrinks
+    the denominator and quietly RAISES the mean, so a broken judge looks like a better
+    system. Failures are counted and reported.
+    """
     try:
         from openai import AsyncOpenAI
         from ragas.llms.base import llm_factory
@@ -109,18 +146,20 @@ async def faithfulness_scores(rows):
     except Exception as error:
         print(f"\n  [faithfulness skipped — {type(error).__name__}: {error}]")
         print('  [fix: pip install "ragas" "langchain-community<0.4"]')
-        return {}
+        return {}, []
 
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         print("\n  [faithfulness skipped — OPENROUTER_API_KEY not set]")
-        return {}
+        return {}, []
 
     client = AsyncOpenAI(base_url=OPENROUTER, api_key=key)
-    metric = Faithfulness(llm=llm_factory(JUDGE_MODEL, provider="openai", client=client))
+    metric = Faithfulness(llm=llm_factory(
+        JUDGE_MODEL, provider="openai", client=client,
+        temperature=JUDGE_TEMPERATURE, max_tokens=JUDGE_MAX_TOKENS))
     print(f"\njudging faithfulness with {JUDGE_MODEL} ...")
 
-    scores = {}
+    scores, failed = {}, []
     for row in rows:
         if not row["contexts"] or not row["answer"]:
             continue
@@ -131,17 +170,44 @@ async def faithfulness_scores(rows):
         # refusing to apply a metric outside its domain.
         if row["is_refusal"]:
             continue
-        try:
-            result = await metric.ascore(user_input=row["query"],
-                                         response=row["answer"],
-                                         retrieved_contexts=row["contexts"])
-            scores[row["id"]] = float(getattr(result, "value", result))
-        except Exception as error:
-            print(f"  case {row['id']}: judge failed — {type(error).__name__}: {error}")
-    return scores
+        draws = []
+        for attempt in range(JUDGE_REPEATS):
+            try:
+                result = await metric.ascore(user_input=row["query"],
+                                             response=row["answer"],
+                                             retrieved_contexts=row["contexts"])
+                draws.append(float(getattr(result, "value", result)))
+            except Exception as error:
+                reason = f"{type(error).__name__}: {error}".strip().rstrip(":").strip()
+                print(f"  case {row['id']} draw {attempt + 1}: judge failed — {reason}")
+        if draws:
+            scores[row["id"]] = draws
+        else:
+            failed.append((row["id"], "every draw failed"))
+    return scores, failed
+
+
+TRANSCRIPT = "data/agent_transcript.json"
 
 
 def main():
+    # --rejudge: judge the SAVED answers again instead of asking the agent for new ones.
+    #
+    # Two things move between ordinary runs — the agent writes a different answer, and
+    # the judge forms a different opinion. A score that changes tells you nothing while
+    # both are free to move. Freezing the answers holds one still, so whatever variance
+    # is left belongs to the judge alone.
+    if "--rejudge" in sys.argv:
+        if not os.path.exists(TRANSCRIPT):
+            print(f"no {TRANSCRIPT} — run the eval once normally first.")
+            return
+        with open(TRANSCRIPT) as handle:
+            rows = json.load(handle)
+        print(f"RE-JUDGING {len(rows)} frozen answers from {TRANSCRIPT}")
+        print("the agent was NOT run; the text being judged is identical to last time.\n")
+        report(rows)
+        return
+
     titles = catalogue_titles()
     print(f"catalogue: {len(titles)} films · {len(CASES)} agent cases\n")
 
@@ -169,7 +235,16 @@ def main():
         mark = "ok " if rows[-1]["tool_ok"] and not rows[-1]["ungrounded"] else "FAIL"
         print(f"  {mark} [{case['id']}] {case['query'][:52]:52} -> {rows[-1]['tool_called']}")
 
-    judged = asyncio.run(faithfulness_scores(rows))
+    # Freeze the exact text that was judged, contexts included, so --rejudge can
+    # replay it. Written BEFORE judging so a judge crash cannot lose the transcript.
+    with open(TRANSCRIPT, "w") as handle:
+        json.dump(rows, handle, indent=2)
+
+    report(rows)
+
+
+def report(rows):
+    judged, judge_failures = asyncio.run(faithfulness_scores(rows))
 
     print("\n" + "=" * 78)
     print("SCOREBOARD")
@@ -180,11 +255,24 @@ def main():
     print(f"  tool accuracy   {tool_ok}/{len(rows)}   exact — right tool chosen")
     print(f"  grounding       {grounded}/{len(rows)}   exact — named no film the tools did not return")
     print(f"  expected films  {complete}/{len(rows)}   exact — named the film we wanted")
+    # judged maps case_id -> LIST of draws. Average per case, then across cases.
+    per_case = {cid: sum(d) / len(d) for cid, d in judged.items()}
     if judged:
-        mean = sum(judged.values()) / len(judged)
+        mean = sum(per_case.values()) / len(per_case)
+        spread = max(max(d) - min(d) for d in judged.values())
         skipped = sum(r["is_refusal"] for r in rows)
+        flag = "  ** INCOMPLETE **" if judge_failures else ""
         print(f"  faithfulness    {mean:.2f}     judged by {JUDGE_MODEL} over "
-              f"{len(judged)} cases ({skipped} refusals excluded — see docstring)")
+              f"{len(judged)} cases ({skipped} refusals excluded — see docstring){flag}")
+        print(f"                  {JUDGE_REPEATS} draws per case · widest disagreement "
+              f"on one case: {spread:.2f}")
+        if spread >= 0.10:
+            print("                  a change smaller than that is NOISE, not a result.")
+        for case_id, reason in judge_failures:
+            print(f"                  !! case {case_id} NOT judged — {reason}")
+        if judge_failures:
+            print("                  !! the mean above is over FEWER cases and is NOT")
+            print("                     comparable to a run where every case was judged.")
 
     print("\n" + "=" * 78)
     print("WHERE IT WENT WRONG")
@@ -198,8 +286,11 @@ def main():
             problems.append(f"UNGROUNDED: named {row['ungrounded']} — not returned by any tool")
         if row["missing"]:
             problems.append(f"did not name {row['missing']}")
-        if row["id"] in judged and judged[row["id"]] < 0.8:
-            problems.append(f"faithfulness {judged[row['id']]:.2f}")
+        if row["id"] in per_case and per_case[row["id"]] < 0.8:
+            draws = judged[row["id"]]
+            spread_note = (f" (draws: {', '.join(f'{d:.2f}' for d in draws)})"
+                           if len(draws) > 1 and max(draws) - min(draws) >= 0.10 else "")
+            problems.append(f"faithfulness {per_case[row['id']]:.2f}{spread_note}")
         if problems:
             clean = False
             print(f"\n  [{row['id']}] {row['query']}")

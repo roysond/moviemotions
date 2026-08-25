@@ -9,18 +9,56 @@ The four things `docs/change-guard.md` asks for at project start, kept current.
 
 | metric | value | what it measures | better is |
 |---|---|---|---|
-| achievable@3 | **81.0%** (34 / 42) | of the expected films that *can* fit in a top 3, how many do | higher |
+| achievable@3 | **89.3%** (25 / 28) | of the expected films that *can* fit in a top 3, how many do | higher |
 | quiet@3 | **0.2232** | top score on queries that have no right answer | **lower** |
 | tool accuracy | **6/6** | did the agent pick the right tool | higher |
 | grounding | **6/6** | did it name only films a tool actually returned | higher |
-| faithfulness | judged | does the answer follow from the retrieved text (RAGAS) | higher |
+| faithfulness | **0.78 ± 0.02** | does the answer follow from the retrieved text (RAGAS) | higher |
+
+### Faithfulness: read this before quoting the number
+
+**Baseline: 0.78 ± 0.02**, `openai/gpt-5.6-luna`, 3 draws per case, 4 cases (2 refusals excluded).
+
+**A change under 0.05 on the headline is noise.** Measured, not assumed: the SAME frozen
+answers, re-judged at temperature 0, scored 0.87 / 0.75 / 0.79 on a single draw each.
+Averaging 3 draws per case brought two consecutive runs to 0.76 and 0.79.
+
+**Per-case scores are a pointer, never a measurement.** Within one run, case 2's three
+draws were 0.29, 0.57, 0.43. Use a low case score to decide *what to go and read*. Never
+report it as a result.
+
+**Why it moves at all.** RAGAS faithfulness decomposes an answer into atomic claims with
+an LLM call, then checks each claim against the context, and scores supported/total. The
+decomposition is generative, so the DENOMINATOR changes between runs — the observed
+0.67 / 0.33 / 0.50 are exactly 2/3, 1/3 and 1/2. Temperature cannot pin that down,
+because a different question is being asked each time.
+
+**A more expensive judge does not help — measured, not assumed.** `openai/gpt-5.6-terra`
+costs 10x `luna` and scored the same frozen answers at 0.77 / 0.79 against luna's
+0.76 / 0.79 — identical headline, and a WORSE per-case spread (0.35 / 0.47 vs
+0.24 / 0.29). The two judges also disagree about which case is the weak one while
+agreeing on the total. Stay on `luna`; the instability is the metric, not the model.
+
+**Void baselines — do not compare against these.** 0.44, 0.88 and 0.92 were single draws
+judged by `google/gemini-3.5-flash-lite`. Different judge, one draw, no error bar.
+
+**Reproduce without re-running the agent:** `python eval_agent.py --rejudge` judges the
+frozen answers in `data/agent_transcript.json`. That is the only way to separate the
+judge's variance from the agent's.
 | graph | **566 nodes · 634 edges** | film 20 · genre 13 · keyword 323 · person 210 | exact |
 
-**Why `achievable@3` and not `recall@3`.** Four golden-set cases list more expected films
-than fit in a top 3, so raw recall@3 can never exceed 79.2% no matter how good retrieval is.
-The ceiling is `sum(min(len(expect), 3))`, and dividing by it removes a penalty the system
-cannot avoid. Recall@3 was 86.2% under the old 25-case set; **that number is void** — it came
-from a different denominator and a different golden set.
+**Measured over 25 cases, arm D** (context header in the stored vector — what production runs).
+Case 21 lists four expected films, so raw recall@3 cannot reach 100%; the ceiling is
+`sum(min(len(expect), 3))` = 28, and dividing by it removes a penalty the system cannot avoid.
+
+**Void baselines — do not compare against these.** 86.2% (25 expected answers, plain recall@3)
+and 81.0% (30 cases, 42 achievable). Both came from a different golden set or a different
+denominator. Five hand-written mood cases were parked in `data/golden_set_mood.json` on
+25 Aug 2026; restoring them changes the denominator again and requires a re-measure.
+
+**The other arms, same run.** B (header everywhere) 92.9% but quiet 0.2543 · C (header at rerank
+only) 85.7%, quiet 0.2754 · A (no header) 78.6%, quiet 0.2061. B finds more and asserts more —
+that trade is why two metrics are reported, never one.
 
 **Two metrics, never one.** Anything that makes the system more eager raises recall *and*
 raises false confidence. A change that moves only one of them has not been understood yet.
@@ -51,7 +89,7 @@ Every module carries `if __name__ == "__main__":` that runs it on real input and
 did, so a component can be watched working without reading its code.
 
 ```bash
-python core.py           # retrieval on a sample query
+python core.py           # graph facts, then the same catalogue scored by vectors
 python tools.py          # the exact tool spec the model receives, then real calls
 python agent.py          # a full loop with the review step in the terminal
 python build_graph.py --status
@@ -67,7 +105,7 @@ python build_graph.py --status
 | `tools.py` | `agent.py`, `eval_agent.py`, and `api.py`'s film parser — it reads the tool's prose |
 | `agent.py` | `api.py`, `eval_agent.py` |
 | `api.py` | `static/index.html` only |
-| `build_graph.py` / `graph_schema.sql` | nothing yet — the graph is not wired into retrieval |
+| `build_graph.py` / `graph_schema.sql` | `core.graph_find`, `tools.find_films_by_fact`, `eval_agent.py` |
 | `data/golden_set.json` | `eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
 | the corpus (`derive_corpus.py`, `chunk_plots.py`) | re-embed, then **both** evals |
 

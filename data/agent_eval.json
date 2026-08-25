@@ -2,7 +2,7 @@
   {
     "id": 1,
     "query": "tell me about Predator",
-    "answer": "Here's what I found on Predator:\n\nPredator (1987) is a 107-minute film where a team of elite commandos on a secret mission in a Central American jungle find themselves hunted by an extraterrestrial warrior.",
+    "answer": "Predator (1987) is a 107-minute film where a team of elite commandos on a secret mission in a Central American jungle find themselves hunted by an extraterrestrial warrior.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -10,12 +10,13 @@
     "missing": [],
     "named": [
       "Predator"
-    ]
+    ],
+    "is_refusal": false
   },
   {
     "id": 2,
     "query": "I want something where creatures are hunting people, really tense",
-    "answer": "Predator is a good fit because it's a tense, thrilling film where dangerous creatures hunt and kill people. Terminator 2: Judgment Day is also tense, featuring a high-stakes chase between humans and a relentless machine.",
+    "answer": "Predator is a good fit because it features a technologically advanced predator stalking and hunting humans in a tense and frightening environment. \n\nTerminator 2: Judgment Day also fits the description, as it involves a relentless terminator hunting down John Connor, creating a tense atmosphere.\n\nIf you're looking for something more intense, Alien could be a good recommendation, as it's a tense and foreboding film about a crew encountering dangerous extraterrestrial life.\n\nHere are the films that match your request:\n\n**Predator** because it involves a technologically advanced predator stalking and hunting humans in a tense and frightening environment.\n\n**Terminator 2: Judgment Day** because it features a relentless terminator hunting down John Connor, creating a tense atmosphere.\n\n**Alien** because it's a tense and foreboding film about a crew encountering dangerous extraterrestrial life.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
@@ -23,24 +24,27 @@
     "missing": [],
     "named": [
       "Terminator 2: Judgment Day",
-      "Predator"
-    ]
+      "Predator",
+      "Alien"
+    ],
+    "is_refusal": false
   },
   {
     "id": 3,
     "query": "do you have The Godfather?",
-    "answer": "I don't have \"The Godfather\" in my catalogue. If you need information on another film, just let me know!",
+    "answer": "Sorry, but 'The Godfather' is not in the catalogue. This was an exact lookup, not a guess, so the film really is absent. If you need details on a different film, just let me know!",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
     "ungrounded": [],
     "missing": [],
-    "named": []
+    "named": [],
+    "is_refusal": true
   },
   {
     "id": 4,
     "query": "a man wrongly imprisoned who never gives up",
-    "answer": "The top result for \"a man wrongly imprisoned who never gives up and fights for his freedom\" is *The Shawshank Redemption* (1994). It's a powerful story about hope and perseverance, following the journey of a man wrongly imprisoned who never gives up. \n\n*Rocky* (1976) also fits somewhat, but it's not as strong a match. \n\nNothing else in the catalogue fits this description well.",
+    "answer": "The most fitting film from the results is \"The Shawshank Redemption\" because it closely matches the description of a gripping, emotional story about a man who is wrongly imprisoned and fights to prove his innocence without ever giving up hope.\n\nHere's why it fits:\n\"Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison, where he puts his accounting skills to work for an amoral warden. During his long stretch in prison, Dufresne comes to be admired by the other inmates -- including an older\"\n\nIf you're looking for something similar but not exactly the same, \"Rocky\" also features a protagonist who doesn't give up despite the odds, but it's more about a boxer's journey rather than a man wrongly imprisoned.\n\nSo, my recommendation is:\n\n**The Shawshank Redemption** is a gripping, emotional story about a man wrongly imprisoned who fights to prove his innocence without ever giving up hope.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
@@ -49,23 +53,25 @@
     "named": [
       "The Shawshank Redemption",
       "Rocky"
-    ]
+    ],
+    "is_refusal": false
   },
   {
     "id": 5,
     "query": "do you have a documentary about climate change?",
-    "answer": "I don't have anything like a documentary about climate change in my catalogue.",
+    "answer": "I don't have any documentaries about climate change in my catalogue. The results I found were all action or adventure films, not documentaries on the topic you asked for. If you need recommendations on a different type of film, I'm here to help.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
     "ungrounded": [],
     "missing": [],
-    "named": []
+    "named": [],
+    "is_refusal": true
   },
   {
     "id": 6,
     "query": "how long is Titanic?",
-    "answer": "\"Titanic\" is a 1997 film that runs for 194 minutes. It tells the story of Rose DeWitt Bukater, who recounts her experiences aboard the Titanic 84 years later. The film covers the ship's departure and its tragic sinking on its first voyage on April 15, 1912.",
+    "answer": "\"Titanic\" is a 1997 film that runs for 194 minutes. The story is told by 101-year-old Rose DeWitt Bukater, recounting her experiences aboard the Titanic, from its departure to its tragic sinking on April 15, 1912.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -73,6 +79,7 @@
     "missing": [],
     "named": [
       "Titanic"
-    ]
+    ],
+    "is_refusal": false
   }
 ]

@@ -34,7 +34,7 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from core import get_film, search
+from core import get_film, graph_find, search
 
 MAX_RESULTS = 5
 
@@ -46,6 +46,7 @@ def search_films(
     min_runtime: Optional[int] = None,
     after_year: Optional[int] = None,
     before_year: Optional[int] = None,
+    exclude_title: Optional[str] = None,
 ) -> str:
     """Find films whose plot, mood or situation matches a natural-language description.
 
@@ -84,13 +85,34 @@ def search_films(
         -> min_runtime=100. Leave out entirely when the user says nothing about length.
     after_year / before_year: four-digit years, inclusive. "something modern" or
         "from the 90s" -> after_year=1990, before_year=1999. Leave out if not asked.
+    exclude_title: a film to keep OUT of the results. Set it whenever the user says
+        "like <film>", "similar to <film>", or "another <film>" — they already know
+        that one and are asking to move past it.
+
+    "SOMETHING LIKE <FILM>, BUT ..." — read this before writing the query.
+    Describe what the film IS LIKE TO WATCH, not what it contains. A film's subject
+    matter is unique to it, so searching for the subject can only find that one film
+    back. Its EXPERIENCE is shared with others, and others is what the user wants.
+
+        "like Jurassic Park but more intense, with gore"
+          WRONG  query="a thrilling intense film with dinosaur attacks and gore"
+                 -> dinosaurs exist in exactly one film here. Top result: Jurassic
+                    Park, the film they asked to move past. Everything else scores
+                    near zero because nothing else has dinosaurs.
+          RIGHT  query="a tense, frightening film where people are hunted by
+                        dangerous creatures and barely escape being killed",
+                 exclude_title="Jurassic Park"
+
+    Only keep the subject matter when the USER asked for it — "another film with
+    dinosaurs" means dinosaurs; "something like Jurassic Park" means the feeling.
 
     These are enforced exactly, so a film that comes back ALWAYS satisfies them —
     never re-check or apologise for them, and never mention a film the tool did not
     return just because you believe it would fit.
 
-    There is no genre filter. If the user asks for a genre ("a horror film", "not a
-    cartoon"), describe it in `query` instead and be honest that you cannot guarantee it.
+    This tool has no genre, cast or director filter. If the user names a GENRE, an
+    ACTOR or a DIRECTOR, that is `find_films_by_fact`, not this — those are facts with
+    exact answers and this tool can only guess at them.
 
     Each result carries the QUOTED TEXT that matched. Base everything you say about a
     film on that quote. If the quote does not support a claim, do not make the claim —
@@ -172,7 +194,88 @@ def lookup_film(title: str) -> str:
     return "\n".join(lines)
 
 
-TOOLS = [search_films, lookup_film]
+@tool
+def find_films_by_fact(
+    director: Optional[str] = None,
+    actor: Optional[str] = None,
+    genre: Optional[str] = None,
+    similar_to: Optional[str] = None,
+) -> str:
+    """Look films up by FACT — who made them, who is in them, what genre they are, or
+    what else is like a named film. Exact database lookup, no scores, no guessing.
+
+    Use this whenever the user names a PERSON, a GENRE, or an existing film to be
+    compared against:
+        "anything by Christopher Nolan"        -> director="Christopher Nolan"
+        "films with Arnold Schwarzenegger"     -> actor="Arnold Schwarzenegger"
+        "show me a horror film"                -> genre="Horror"
+        "something like Inception"             -> similar_to="Inception"
+        "a Nolan action film"                  -> director="Christopher Nolan", genre="Action"
+
+    Every argument you supply is combined with AND, so supplying two narrows the result.
+    Supply only what the user actually said.
+
+    WHEN NOT TO USE IT. If the user describes a FEELING, a MOOD or a PLOT rather than
+    naming something — "something tense", "a film about a wrongly imprisoned man" — that
+    is `search_films`. If the user names ONE film and wants ITS details — "how long is
+    Titanic?" — that is `lookup_film`. The rule:
+        a description        -> search_films
+        one title, its facts -> lookup_film
+        a name or a category -> this tool
+
+    genre MUST be one of these exactly, and there are no others in this catalogue:
+        Action · Adventure · Animation · Comedy · Crime · Drama · Family
+        Fantasy · Horror · Mystery · Romance · Science Fiction · Thriller
+    If the user asks for a genre not on that list, say plainly that the catalogue does
+    not have it. Do not substitute a near-miss.
+
+    WHAT COMES BACK, and how to read it. Each film carries the QUOTED TEXT of its own
+    description. Everything you say about a film must come from ITS quote. Do not describe
+    a film from your own knowledge, however sure you are — if the quote does not support
+    the sentence you want to write, write a different sentence or say nothing about it.
+    There are no relevance scores here because
+    there is nothing to be unsure about — a person either directed a film or did not.
+    Everything returned satisfies every filter exactly, so state it plainly and never
+    hedge. Three distinct empty answers, which must NOT be reported the same way:
+        "not in this catalogue"   the person, genre or film is absent entirely. Say so.
+        "no film matches all"     each filter exists, but nothing satisfies them together.
+                                  Say which combination failed and offer to drop one.
+        a list                    these are facts. Do not re-check them, do not apologise
+                                  for them, and do not add films the tool did not return.
+    Never call `search_films` to double-check this result. This IS the exact answer.
+    """
+    asked = {k: v for k, v in (("director", director), ("actor", actor),
+                               ("genre", genre), ("similar_to", similar_to)) if v}
+    if not asked:
+        return ("No filter was given. Supply at least one of director, actor, genre or "
+                "similar_to — or use search_films if the user described a mood or plot.")
+
+    result = graph_find(**asked)
+
+    if result["unknown"]:
+        field, value = next(iter(result["unknown"].items()))
+        noun = {"director": "director", "actor": "actor",
+                "genre": "genre", "similar_to": "film"}[field]
+        return (f"'{value}' is not in this catalogue as a {noun}. This was an exact "
+                f"lookup, not a guess, so it genuinely is absent — tell the user plainly. "
+                f"Do not call search_films to look for it.")
+
+    if not result["films"]:
+        return ("Each of those exists in the catalogue, but no single film satisfies all "
+                f"of them at once ({', '.join(f'{k}={v}' for k, v in asked.items())}). "
+                "Tell the user which combination came up empty and offer to drop one.")
+
+    lines = ["exact match on: " + ", ".join(f"{k}={v}" for k, v in asked.items())]
+    for film in result["films"]:
+        year = (film["release_date"] or "----")[:4]
+        runtime = f"{film['runtime_minutes']} min" if film["runtime_minutes"] else "? min"
+        lines.append(f"{film['title']} ({year}) · {runtime} · {'; '.join(film['why'])[:120]}")
+        if film.get("evidence"):
+            lines.append(f'   "{film["evidence"]}"')
+    return "\n".join(lines)
+
+
+TOOLS = [search_films, lookup_film, find_films_by_fact]
 
 
 if __name__ == "__main__":
@@ -202,3 +305,12 @@ if __name__ == "__main__":
     for probe in ["Predator", "Terminator 2", "The Godfather"]:
         print(f"\ncall: lookup_film({{'title': '{probe}'}})")
         print(lookup_film.invoke({"title": probe}))
+
+    for kwargs in ({"director": "Christopher Nolan"},
+                   {"actor": "Arnold Schwarzenegger"},
+                   {"genre": "Horror"},
+                   {"director": "Christopher Nolan", "genre": "Comedy"},
+                   {"similar_to": "Inception"},
+                   {"director": "Quentin Tarantino"}):
+        print(f"\ncall: find_films_by_fact({kwargs})")
+        print(find_films_by_fact.invoke(kwargs))

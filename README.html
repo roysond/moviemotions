@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MovieMotions — README</title>
+<style>
+  :root{
+    --ink:#16242b; --soft:#4a626d; --muted:#7d919b;
+    --paper:#f1efea; --card:#fff; --line:#dcd6cc;
+    --p0:#1a6f68; --p0s:#e3efee;
+    --p1:#2c5f8f; --p1s:#e5edf4;
+    --p2:#a35a18; --p2s:#f9efe3;
+    --p3:#6a4a8c; --p3s:#eee8f5;
+    --cross:#8a2f52; --crosss:#f9e7ee;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:44px 22px 80px}
+
+  header{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:26px}
+  .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--p2);font-weight:700}
+  h1{font-size:36px;line-height:1.13;margin:9px 0 10px;letter-spacing:-.022em}
+  .sub{font-size:17px;color:var(--soft);margin:0;max-width:70ch}
+  .sub em{color:var(--ink)}
+
+  h2{font-size:12.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);
+     margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:700}
+  h3{font-size:17px;margin:30px 0 10px;letter-spacing:-.01em}
+  p{max-width:78ch}
+
+  pre{background:#20313a;color:#e8eef1;border-radius:11px;padding:17px 20px;overflow-x:auto;
+      font:13px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace;margin:16px 0}
+  pre.diagram{background:var(--card);color:var(--ink);border:1px solid var(--line);
+      font-size:12.5px;line-height:1.55}
+  code{background:#eae6de;border-radius:4px;padding:1.5px 5px;font-size:13px;
+       font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit;color:inherit}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+     border-bottom:2px solid var(--line);padding:0 14px 9px 0;font-weight:700}
+  td{border-bottom:1px solid var(--line);padding:12px 14px 12px 0;vertical-align:top;line-height:1.55}
+  tr:last-child td{border-bottom:none} td:last-child,th:last-child{padding-right:0}
+  td:first-child{white-space:nowrap}
+  table.wide td:first-child{white-space:normal;width:30%}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px;margin:18px 0 6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:15px 17px;
+        border-left:5px solid var(--ac)}
+  .card .k{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .card .v{font-size:25px;font-weight:800;letter-spacing:-.02em;margin:5px 0 2px;color:var(--ac)}
+  .card .n{font-size:12.5px;color:var(--soft);line-height:1.45}
+
+  .note{background:#fdf4e9;border:1px solid #ecd0a8;border-left:4px solid var(--p2);
+        border-radius:0 10px 10px 0;padding:15px 19px;margin:18px 0;font-size:14.5px}
+  .note b{color:var(--p2)}
+  .warn{background:var(--crosss);border:1px solid #edc4d2;border-left:4px solid var(--cross)}
+  .warn b{color:var(--cross)}
+
+  ul{max-width:78ch;padding-left:20px} li{margin:7px 0}
+  .lead{font-size:16.5px;color:var(--soft)}
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
+         font-size:12.5px;color:var(--muted)}
+  @media(max-width:680px){h1{font-size:27px}.wrap{padding:30px 16px 60px}td:first-child{white-space:normal}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">MovieMotions · README</div>
+  <h1>A film recommendation agent, built from scratch</h1>
+  <p class="sub">You describe how you want to feel or what you want to watch — <em>“something tense
+  where creatures hunt people, under two hours”</em> — and it decides what to look up, searches a
+  scene-level corpus, judges what came back, and either recommends something or tells you plainly
+  that nothing fits.</p>
+</header>
+
+<p class="lead">Built in passes as a working study of retrieval and agent design. It is not a wrapper
+around a hosted RAG service: the chunking, retrieval, reranking, agent loop and evaluation harness
+are all in this repository.</p>
+
+<pre class="diagram">you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ pgvector + rerank
+           ▲                                   lookup_film         ──▶ exact title
+           │                                   find_films_by_fact  ──▶ knowledge graph
+           └────── reads the results, decides again ◀────────────────────┘
+                               │
+                        human review  ⏸  approve / edit / send back
+                               │
+                               ▼
+                            answer</pre>
+
+<h2>At a glance</h2>
+<div class="cards">
+  <div class="card" style="--ac:var(--p0)"><div class="k">achievable@3</div>
+    <div class="v">89.3%</div><div class="n">25 of 28 reachable answers</div></div>
+  <div class="card" style="--ac:var(--p1)"><div class="k">quiet@3 · lower better</div>
+    <div class="v">0.2232</div><div class="n">confidence on no-answer queries</div></div>
+  <div class="card" style="--ac:var(--p2)"><div class="k">tool accuracy</div>
+    <div class="v">6/6</div><div class="n">exact, no judge involved</div></div>
+  <div class="card" style="--ac:var(--p3)"><div class="k">faithfulness</div>
+    <div class="v">0.78</div><div class="n">±0.02 · under 0.05 is noise</div></div>
+</div>
+
+<h2>What it does that a plain RAG pipeline doesn't</h2>
+<table class="wide">
+  <tr><td><b>It loops</b></td>
+      <td>The model chooses a tool, reads the result, and can search again with different wording.
+      The shape of a run depends on the query, so it cannot be drawn in advance.</td></tr>
+  <tr><td><b>Hard constraints are enforced in SQL</b></td>
+      <td>“under two hours” becomes <code>runtime_minutes &lt;= 120</code>, not an embedding.
+      Vectors capture topic, not truth value.</td></tr>
+  <tr><td><b>Facts go to a graph, not a reranker</b></td>
+      <td>“anything by Nolan” is a yes/no question about an edge, so it never touches a vector.
+      Measured: the vector path returns Terminator 2 at 0.465 for that query, and scores
+      Schwarzenegger films highly even though his name appears <b>nowhere</b> in the corpus — the
+      reranker was answering from its own training.</td></tr>
+  <tr><td><b>It refuses</b></td>
+      <td>A weak top score produces <em>“I don't have anything like that”</em> rather than the
+      least-bad option.</td></tr>
+  <tr><td><b>A human can intervene</b></td>
+      <td>The graph pauses before answering; you can approve, reword, or send it back round the
+      loop with a note.</td></tr>
+  <tr><td><b>It is measured</b></td>
+      <td>Retrieval and agent behaviour each have an eval harness — exact metrics where an exact
+      test exists, an LLM judge only where none does.</td></tr>
+</table>
+
+<h2>Where the code lives</h2>
+<table>
+  <tr><th>file</th><th>what it is</th></tr>
+  <tr><td><code>core.py</code></td><td><b>The engine.</b> Embedding, the retrieval SQL, reranking,
+      film collapse, exact title lookup, graph queries. Everything else imports this; nothing here
+      imports anything else in the repo.</td></tr>
+  <tr><td><code>tools.py</code></td><td>What the agent is allowed to do. The docstrings <em>are</em>
+      the interface — only they travel to the model.</td></tr>
+  <tr><td><code>agent.py</code></td><td>The LangGraph loop: think → act → think → review. The
+      conditional edge is the whole difference between a pipeline and an agent.</td></tr>
+  <tr><td><code>api.py</code></td><td>HTTP over the <em>same compiled graph</em>. No prompts, no
+      tools, no logic. If it and <code>agent.py</code> ever disagree, one is a bug.</td></tr>
+  <tr><td><code>build_graph.py</code></td><td>Derives the knowledge graph from
+      <code>movies.raw_payload</code>. Idempotent; <code>--status</code> and
+      <code>--remove</code>.</td></tr>
+  <tr><td><code>eval_variants.py</code><br><code>eval_agent.py</code></td>
+      <td>The two harnesses. See <code>docs/verification.md</code>.</td></tr>
+</table>
+
+<div class="note warn"><b>One caution.</b> <code>api.py</code> parses <code>tools.py</code>'s
+plain-text output with a regular expression, so changing the tool's wording can silently break the
+web display with no error anywhere.</div>
+
+<h2>Requirements</h2>
+<ul>
+  <li><b>Python 3.11+</b></li>
+  <li><b>PostgreSQL 15+</b> with the <a href="https://github.com/pgvector/pgvector">pgvector</a> extension</li>
+  <li><b>An AWS account with Amazon Bedrock access</b> — Nova for embeddings and text</li>
+  <li><b>An <a href="https://openrouter.ai">OpenRouter</a> key</b> — reranker and eval judge</li>
+  <li><em>optional</em> — a <a href="https://smith.langchain.com">LangSmith</a> key for tracing</li>
+  <li><em>optional</em> — a <a href="https://www.themoviedb.org/settings/api">TMDB</a> key, only to
+      rebuild the catalogue from scratch</li>
+</ul>
+
+<h2>Setup</h2>
+
+<h3>1 · Clone and create the environment</h3>
+<pre><code>git clone &lt;your-fork-url&gt; moviemotions
+cd moviemotions
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt</code></pre>
+<p><code>requirements.txt</code> is a full freeze — exact versions including transitive
+dependencies — so the environment you get is the one the project was measured on.</p>
+<div class="note"><b>One pin matters.</b> <code>langchain-community</code> is held below 0.4. RAGAS
+imports a module that version removed. Do not upgrade it casually.</div>
+
+<h3>2 · Configure credentials</h3>
+<pre><code>cp .env.example .env</code></pre>
+<p>Then fill in <code>.env</code>. It is gitignored and must stay that way.</p>
+<table>
+  <tr><th>variable</th><th>what it is</th></tr>
+  <tr><td><code>DATABASE_URL</code></td><td><code>postgresql://user:pass@localhost:5432/moviemotions</code></td></tr>
+  <tr><td><code>AWS_ACCESS_KEY_ID</code><br><code>AWS_SECRET_ACCESS_KEY</code><br><code>AWS_REGION</code></td>
+      <td>An IAM user with permission to invoke Bedrock.</td></tr>
+  <tr><td><code>BEDROCK_MODEL_EMBED_NOVA</code></td><td>The embedding model id.</td></tr>
+  <tr><td><code>BEDROCK_MODEL_TEXT</code></td><td>The text model id — also the agent's model unless
+      <code>BEDROCK_MODEL_AGENT</code> is set.</td></tr>
+  <tr><td><code>OPENROUTER_API_KEY</code></td><td>Reranker and eval judge.</td></tr>
+  <tr><td><code>RERANK_MODEL</code></td><td>Defaults to <code>cohere/rerank-v3.5</code>.</td></tr>
+  <tr><td><code>RAGAS_JUDGE_MODEL</code></td><td>The faithfulness judge. Deliberately not the model
+      under test.</td></tr>
+  <tr><td><code>LANGSMITH_*</code></td><td>Optional tracing.</td></tr>
+  <tr><td><code>TMDB_READ_TOKEN</code></td><td>Only needed to rebuild the catalogue.</td></tr>
+</table>
+<p>Verify without printing anything secret:</p>
+<pre><code>python -c "
+import os; from dotenv import load_dotenv; load_dotenv()
+for k in ['DATABASE_URL','AWS_REGION','BEDROCK_MODEL_EMBED_NOVA','OPENROUTER_API_KEY']:
+    v = os.environ.get(k)
+    print(f'{k:28}', f'present, {len(v)} chars' if v else 'MISSING')
+"</code></pre>
+
+<h3>3 · Create the database</h3>
+<pre><code>createdb moviemotions
+psql moviemotions -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql moviemotions -f schema.sql
+psql moviemotions -f graph_schema.sql</code></pre>
+<p>Structure only, no data. Five tables — three for retrieval, two for the graph:</p>
+<pre class="diagram">movies             one row per film     movie_id · title · release_date · runtime_minutes · context_header
+chunks             many rows per film   chunk_id · movie_id · source_field · chunk_index · content
+chunk_embeddings   one row per vector   embedding_id · chunk_id · model_id · embed_variant · embedding
+
+graph_nodes        one row per thing    node_key · node_type · name · properties
+graph_edges        one row per fact     from_key · to_key · edge_type · source · confidence</pre>
+<p>A key that joins two tables carries the <b>same column name in both</b> (<code>movie_id</code>,
+<code>chunk_id</code>), and each table's own key is named for its grain. The column name then tells
+you what a row <em>is</em>.</p>
+
+<h3>4 · Build the corpus</h3>
+<p>No film data is committed. TMDB's payloads are licensed to them, Wikipedia's text is CC BY-SA,
+and embeddings are derived data that go stale the moment a model changes.
+<b>Keep the raw thing, derive everything else from it.</b> Run these in order:</p>
+<pre><code>python fetch_titles.py      # TMDB → data/raw/tmdb_*.json            (needs TMDB_READ_TOKEN)
+python fetch_plots.py       # IMDb id → Wikidata → Wikipedia plots   → data/plots.json
+python load_corpus.py       # films + overview chunks                → Postgres
+python derive_corpus.py     # a model writes mood/theme text         → data/derived.json
+python load_derived.py      # derived text → chunks + embeddings
+python chunk_plots.py       # semantic → recursive → overlap chunking, embeds each chunk
+python build_graph.py       # films · people · genres · keywords     → nodes + edges</code></pre>
+<p><code>chunk_plots.py</code> is resumable: it commits per film and caches vectors by content hash,
+so a rate limit costs time, never finished work. Re-run it and it continues.</p>
+<div class="note"><b>Wikimedia may refuse an automated fetch</b> under its robot policy. If
+<code>fetch_plots.py</code> returns 403s the plots have to be gathered another way; everything
+downstream is unaffected.</div>
+
+<h2>Running it</h2>
+<p><b>Web UI</b> — shows the tool chosen, its exact arguments, every result with its score and
+quoted evidence, and the human-review step with buttons:</p>
+<pre><code>uvicorn api:app --reload --port 8000     # then open http://127.0.0.1:8000</code></pre>
+<p><b>Command line</b>, with the review step in the terminal:</p>
+<pre><code>python -c "from agent import run; print(run('something tense with creatures, under two hours'))"</code></pre>
+<p><b>Retrieval only</b>, no agent:</p>
+<pre><code>python search.py "a father and son separated and trying to find each other"</code></pre>
+
+<h2>Evaluation</h2>
+<p>Two harnesses, measuring two different things.</p>
+<pre><code>python eval_variants.py       # RETRIEVAL: achievable@3 and quiet@3 over a 25-case golden set
+python eval_agent.py          # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
+python eval_agent.py --rejudge   # re-judge the SAME frozen answers — isolates judge variance</code></pre>
+<p><code>eval_variants.py</code> cannot see the agent at all. <code>eval_agent.py</code> measures
+the three ways a loop can be wrong that a retrieval eval structurally cannot detect: the wrong
+tool, a film no tool returned, and claims the retrieved text does not support.</p>
+<p><b>Only one metric uses an LLM.</b> Tool choice is a string comparison; grounding is a set
+difference. Both are deterministic, free, and cannot drift. Faithfulness has no exact test, so —
+and only it — goes to a judge, and the judge is deliberately not the model under test.</p>
+
+<h3>Current numbers</h3>
+<table>
+  <tr><th>metric</th><th>value</th><th>meaning</th></tr>
+  <tr><td>achievable@3</td><td><b>89.3%</b> (25/28)</td>
+      <td>Of the expected films that <em>can</em> fit in a top 3, how many do.</td></tr>
+  <tr><td>quiet@3</td><td><b>0.2232</b></td>
+      <td>Top score on queries with no right answer — <b>lower is better</b>.</td></tr>
+  <tr><td>tool accuracy</td><td><b>6/6</b></td><td>Exact.</td></tr>
+  <tr><td>grounding</td><td><b>6/6</b></td><td>Exact — named no film a tool did not return.</td></tr>
+  <tr><td>faithfulness</td><td><b>0.78 ± 0.02</b></td>
+      <td>RAGAS via OpenRouter, 3 draws per case. <b>A change under 0.05 is noise.</b></td></tr>
+</table>
+<p><b>Two metrics, never one:</b> anything that makes the system eager raises recall
+<em>and</em> false confidence.</p>
+<p><b>Why <code>achievable@3</code> rather than plain recall@3.</b> One case in the golden set names
+four films, so raw recall@3 cannot reach 100% however good retrieval gets. Dividing by
+<code>sum(min(len(expect), 3))</code> removes a penalty the system cannot avoid.</p>
+<p><b>The numbers above are arm D</b> — the context header stored in the vector, which is what runs
+in production. Arm B (header everywhere) scores higher on achievable@3, <b>92.9%</b>, and worse on
+quiet@3, <b>0.2543</b> vs 0.2232. That is the trade in one line: the arm that finds more also
+asserts more on questions with no answer.</p>
+<div class="note warn"><b>Faithfulness is not a point estimate.</b> RAGAS decomposes an answer into
+atomic claims with an LLM call, then scores supported ÷ total — so the denominator itself moves
+between runs. The same frozen answers, re-judged at temperature 0, scored 0.87 / 0.75 / 0.79.
+Averaging three draws per case brings that to ±0.02. Per-case scores tell you <em>which</em> case to
+go and read; they are never a result. Full method in <code>docs/verification.md</code>.</div>
+
+<h3>Experiments</h3>
+<p><code>experiments/</code> holds the diagnostics that produced those numbers — not dead code:</p>
+<table>
+  <tr><th>file</th><th>the question it answers</th></tr>
+  <tr><td><code>why_chunk.py</code></td><td>Which chunk won, and did the quota even admit it?</td></tr>
+  <tr><td><code>graph_vs_vector.py</code></td><td>The same factual question, sent to both machines, side by side.</td></tr>
+  <tr><td><code>corpus_ablation.py</code></td><td>What is each corpus worth? (leave-one-out)</td></tr>
+  <tr><td><code>mood_audit.py</code></td><td>Which films dominate mood queries, and are they ever right?</td></tr>
+  <tr><td><code>genre_corpus.py</code></td><td>The genre-as-corpus experiment — add, measure, remove.</td></tr>
+  <tr><td><code>probe_agent_models.py</code></td><td>Which Bedrock models can this account actually run the agent on?</td></tr>
+  <tr><td><code>db_audit.py</code></td><td>Read-only schema, row counts, integrity checks.</td></tr>
+</table>
+
+<h2>Documentation</h2>
+<table>
+  <tr><th>file</th><th>read it when</th></tr>
+  <tr><td><code>docs/verification.md</code></td><td><b>Start here before changing anything</b> — the
+      baseline numbers, the one command that reproduces each, and what to re-test when a file
+      changes.</td></tr>
+  <tr><td><code>docs/change-guard.md</code></td><td>The change protocol: contract → one variable →
+      prove three ways.</td></tr>
+  <tr><td><code>docs/PASS-0-DIAGRAM.html</code> · <code>PASS-1</code> · <code>PASS-2</code></td>
+      <td><b>Open all three side by side</b> — same rows, same order; only the boxes change.</td></tr>
+  <tr><td><code>docs/ARCHITECTURE.html</code></td><td>When you lose the shape of the system.</td></tr>
+  <tr><td><code>docs/decisions.md</code></td><td>Before starting any change — one line of reasoning
+      per decision.</td></tr>
+  <tr><td><code>docs/retrieval-pipeline.md</code></td><td>The query path, end to end.</td></tr>
+  <tr><td><code>docs/verifying-code.md</code></td><td>How to verify a change you cannot read.</td></tr>
+  <tr><td><code>docs/third-party.md</code></td><td>Licence and terms for every external source.</td></tr>
+</table>
+
+<h2>Design notes worth knowing before changing anything</h2>
+<p><b>Hard constraints are filtered in SQL, above <code>ROW_NUMBER()</code>.</b> Filtering
+<em>after</em> the per-source quota shrinks the result set once the budget is already spent;
+filtering before it means the quota refills with eligible films.</p>
+<p><b>Films are collapsed after reranking, never in SQL.</b> Collapsing early let a 120-character
+mood blurb beat its own film's 600-character scene, so the plot corpus never reached the
+reranker.</p>
+<p><b>A film's score is its top 3 chunks, damped (1, ½, ⅓).</b> Max-pooling rewards one lucky scene:
+Finding Nemo's single barracuda paragraph once outranked Predator, which is about nothing else. The
+maximum possible total is therefore <b>1.833</b>, not 1.0 — the score is a sum, not a
+probability.</p>
+<p><b>The context header lives on the film, not in the chunk.</b> Measured: putting it in the stored
+vector is worth +7–10 recall points; adding it at rerank time adds less and costs the most false
+confidence.</p>
+<p><b>Tool descriptions are the interface.</b> Only the docstring travels to the model — the code
+never leaves the machine. Score thresholds, when-not-to-use rules and the query-expansion rule all
+live in prose, and the model obeys them.</p>
+
+<h2>Known weaknesses</h2>
+<ul>
+  <li><b>Mood queries rank the wrong films.</b> <em>“warm, comforting, rainy evening”</em> returns
+      prison dramas. The corpus describes what <em>happens</em>, never how a film <em>feels</em> — a
+      corpus problem, not a query or threshold problem.</li>
+  <li><b>Short text dominates the vector stage.</b> For one creature-peril query, nine of the top
+      ten candidates were 120-character mood blurbs — including Finding Nemo. Concentrated text wins
+      on cosine similarity, so the plot corpus can struggle to reach the reranker.</li>
+  <li><b>Rerank scores are not stable run to run.</b> OpenRouter is a gateway; the same model id can
+      land on a different backend. <b>Trust the gap between scores, not the absolute value.</b></li>
+  <li><b>The graph is thin on people.</b> Only 3 directors and 7 actors appear in more than one
+      film. A graph's value scales with shared nodes, and 20 films is a small world.</li>
+  <li><b>Answer quality is at the small-model floor.</b> The agent model is strong at structured
+      decisions and weak at prose. <code>BEDROCK_MODEL_AGENT</code> is the seam for swapping it.</li>
+  <li><b>No CI gate.</b> There is no <code>.github/workflows/</code>, so nothing runs automatically
+      on a pull request.</li>
+</ul>
+
+<h2>Third-party data and licences</h2>
+<p>Film metadata from <b>TMDB</b> (this product is not endorsed or certified by TMDB). Plot
+summaries from <b>Wikipedia</b>, CC BY-SA 4.0. Embeddings and text generation via <b>Amazon
+Bedrock</b>; reranking and eval judging via <b>OpenRouter</b>. See
+<code>docs/third-party.md</code> before redistributing anything.</p>
+
+<footer>MovieMotions · HTML twin of <code>README.md</code>. When the two disagree, the Markdown is
+the one git reviews — update both.</footer>
+
+</div>
+</body>
+</html>

@@ -1,5 +1,5 @@
 {
-  "note": "Golden set for MovieMotions retrieval. The ANSWERS are human ground truth and are model-independent — they do not change when the model or the pipeline changes. Only the SCORE against them changes. 'expect' lists every film that genuinely satisfies the query within this 20-film corpus. An empty 'expect' is a deliberate no-answer case: it measures whether the system can be wrong quietly, since semantic search always returns something. MOOD CASES 26-30 were written by Royson on 24 Aug as human ground truth — which films genuinely feel a certain way is taste and lived experience, not a fact any model can look up. NOTE ON SCORING: recall@3 cannot reach 100% on a case with more than 3 expected answers, because only 3 films fit in the top 3. Cases 27 and 28 have 6 each, so their ceiling is 50%. Adding these cases also CHANGES THE DENOMINATOR, so the 86.2% baseline recorded before them is not comparable — the baseline must be re-measured before any Pass 3 change is judged.",
+  "note": "Golden set for MovieMotions retrieval. The ANSWERS are human ground truth and are model-independent — they do not change when the model or the pipeline changes. Only the SCORE against them changes. 'expect' lists every film that genuinely satisfies the query within this 20-film corpus. An empty 'expect' is a deliberate no-answer case: it measures whether the system can be wrong quietly, since semantic search always returns something. NOTE ON SCORING: recall@3 cannot reach 100% on a case with more than 3 expected answers, because only 3 films fit in the top 3. Case 21 has 4, so its ceiling is 75%. achievable@3 divides by sum(min(len(expect), 3)) to remove a penalty the system cannot avoid. PARKED: five hand-written mood cases (26-30) were moved to data/golden_set_mood.json on 25 Aug 2026. Removing them CHANGES THE DENOMINATOR, so the 81.0% (34/42) baseline measured with them is not comparable and must be re-measured before any Pass 3 change is judged.",
   "cases": [
     {
       "id": 1,
@@ -201,65 +201,6 @@
       "type": "no_answer",
       "query": "a documentary about climate change and rising sea levels",
       "expect": []
-    },
-    {
-      "id": 26,
-      "type": "mood",
-      "query": "a warm, comforting film for a rainy evening at home",
-      "expect": [
-        "Crazy, Stupid, Love.",
-        "Finding Nemo",
-        "Home Alone",
-        "The Hangover",
-        "Toy Story",
-        "The Shawshank Redemption"
-      ]
-    },
-    {
-      "id": 27,
-      "type": "mood",
-      "query": "something uplifting that leaves me feeling better than I started",
-      "expect": [
-        "Finding Nemo",
-        "Rocky",
-        "Spider-Man",
-        "The Karate Kid",
-        "Toy Story",
-        "The Dark Knight",
-        "The Shawshank Redemption"
-      ]
-    },
-    {
-      "id": 28,
-      "type": "mood",
-      "query": "something tense and stressful, the kind where you grip the armrest",
-      "expect": [
-        "Alien",
-        "Get Out",
-        "Predator",
-        "Terminator 2: Judgment Day",
-        "Jurassic Park",
-        "Mortal Kombat"
-      ]
-    },
-    {
-      "id": 29,
-      "type": "mood",
-      "query": "a sad film that might make me cry",
-      "expect": [
-        "Logan",
-        "Titanic",
-        "The Shawshank Redemption"
-      ]
-    },
-    {
-      "id": 30,
-      "type": "mood",
-      "query": "something nostalgic that feels like childhood",
-      "expect": [
-        "Harry Potter and the Philosopher's Stone",
-        "Home Alone"
-      ]
     }
   ]
 }

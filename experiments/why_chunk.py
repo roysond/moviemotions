@@ -20,11 +20,19 @@ from core import DATABASE_URL, MODEL_ID, embed  # noqa: E402
 
 CANDIDATE_K = 10
 
+# Production searches ONE variant per source type. A diagnostic that reads both is
+# ranking against a pool twice the real size, so every "cut" verdict it prints is wrong.
+# Match production or do not bother.
+VARIANT = os.environ.get("WHY_VARIANT", "context_header")
+
+# Default probes, or: python experiments/why_chunk.py "<query>" ["<target film>"]
 QUERIES = [
     ("a father and son separated and trying to find each other", "Finding Nemo"),
     ("movie that has creatures chasing you and is very intense", "Jurassic Park"),
     ("an underdog who trains hard to win a fight", "The Karate Kid"),
 ]
+if len(sys.argv) > 1:
+    QUERIES = [(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")]
 
 BEST_PER_FILM = """
 SELECT title, source_field, chunk_index, similarity, content
@@ -36,6 +44,8 @@ FROM (
     JOIN chunks c USING (chunk_id)
     JOIN movies m USING (movie_id)
     WHERE ce.model_id = %(model_id)s
+      AND ce.embed_variant = CASE WHEN c.source_field = 'plot'
+                                  THEN %(variant)s ELSE 'clean' END
     ORDER BY m.movie_id, ce.embedding <=> %(q)s::vector
 ) best
 ORDER BY similarity DESC
@@ -55,6 +65,8 @@ FROM (
     JOIN chunks c USING (chunk_id)
     JOIN movies m USING (movie_id)
     WHERE ce.model_id = %(model_id)s
+      AND ce.embed_variant = CASE WHEN c.source_field = 'plot'
+                                  THEN %(variant)s ELSE 'clean' END
 ) ranked
 WHERE title = %(title)s
 ORDER BY similarity DESC
@@ -62,17 +74,21 @@ ORDER BY similarity DESC
 
 with psycopg.connect(DATABASE_URL) as conn:
     print("=" * 78)
-    print("SANITY — what is actually stored")
+    print(f"SANITY — what this query actually searches   (variant={VARIANT})")
     for row in conn.execute(
-        "SELECT c.source_field, count(*), min(length(c.content)), max(length(c.content)) "
+        "SELECT c.source_field, count(DISTINCT c.chunk_id), count(*), "
+        "       min(length(c.content)), max(length(c.content)) "
         "FROM chunks c JOIN chunk_embeddings ce ON ce.chunk_id = c.chunk_id "
-        "WHERE ce.model_id = %s GROUP BY 1 ORDER BY 1", (MODEL_ID,)
+        "WHERE ce.model_id = %s "
+        "  AND ce.embed_variant = CASE WHEN c.source_field = 'plot' THEN %s ELSE 'clean' END "
+        "GROUP BY 1 ORDER BY 1", (MODEL_ID, VARIANT)
     ).fetchall():
-        print(f"   {row[0]:9} count={row[1]:4}  len min={row[2]} max={row[3]}")
+        print(f"   {row[0]:9} chunks={row[1]:4}  vectors={row[2]:4}  "
+              f"len min={row[3]} max={row[4]}")
 
     for query, target in QUERIES:
         vector = str(embed(query))
-        params = {"q": vector, "model_id": MODEL_ID}
+        params = {"q": vector, "model_id": MODEL_ID, "variant": VARIANT}
 
         print("\n" + "=" * 78)
         print(f"QUERY: {query!r}")
@@ -87,6 +103,8 @@ with psycopg.connect(DATABASE_URL) as conn:
                 target_in_candidates = True
             print(f"   {rank:2}. {sim:.4f}  [{field:8} #{idx}]  {title}{mark}")
 
+        if not target:
+            continue
         print(f"\n  B · every chunk of {target} — with its rank INSIDE its source type")
         print(f"      (quota admits plot rank<=30, derived/overview rank<=10)")
         for field, idx, content, sim, rank_in_field in conn.execute(

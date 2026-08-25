@@ -120,7 +120,9 @@ def main():
           f"THE HEADLINE — 100% means nothing more could have been surfaced at k={TOP_N}.")
     print(f"  recall@3      hits / {any_arm['expected']} expected answers. Kept for continuity, "
           f"but it can never reach 100%:")
-    print(f"                4 cases list more films than fit in a top {TOP_N}.")
+    over = sum(1 for c in cases if len(c["expect"]) > TOP_N)
+    print(f"                {over} case{'s' if over != 1 else ''} list"
+          f"{'' if over != 1 else 's'} more films than fit in a top {TOP_N}.")
     print("  quiet@3       top score on queries with NO right answer. LOWER is better.")
 
     print("\n" + "=" * 78)

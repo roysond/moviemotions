@@ -10,9 +10,10 @@ around a hosted RAG service: the chunking, retrieval, reranking, agent loop and 
 are all in this repo.
 
 ```
-you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films ──▶ Postgres + pgvector
-           ▲                                   lookup_film   ──▶ rerank (Cohere)
-           └────── reads the results, decides again ◀──────────────┘
+you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ pgvector + rerank
+           ▲                                   lookup_film         ──▶ exact title
+           │                                   find_films_by_fact  ──▶ knowledge graph
+           └────── reads the results, decides again ◀────────────────────┘
                                │
                         human review  ⏸  approve / edit / send back
                                │
@@ -28,6 +29,7 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films �
 |---|---|
 | **It loops** | The model chooses a tool, reads the result, and can search again with different wording. The shape of a run depends on the query, so it cannot be drawn in advance |
 | **Hard constraints are enforced in SQL** | "under two hours" becomes `runtime_minutes <= 120`, not an embedding. Vectors capture topic, not truth value |
+| **Facts go to a graph, not a reranker** | "anything by Nolan" is a yes/no question about an edge, so it never touches a vector. Measured: the vector path returns Terminator 2 at 0.465 for that query, and scores Schwarzenegger films highly even though his name appears nowhere in the corpus — the reranker was answering from its own training |
 | **It refuses** | A weak top score produces *"I don't have anything like that"* rather than the least-bad option |
 | **A human can intervene** | The graph pauses before answering; you can approve, reword, or send it back round the loop with a note |
 | **It is measured** | Retrieval and agent behaviour each have an eval harness — exact metrics where an exact test exists, an LLM judge only where none does |
@@ -43,6 +45,7 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films �
 | `agent.py` | the LangGraph loop: think → act → think → review. The conditional edge is the whole difference between a pipeline and an agent |
 | `api.py` | HTTP over the *same compiled graph*. No prompts, no tools, no logic. If it and `agent.py` ever disagree, one is a bug |
 | `build_graph.py` | derives the knowledge graph from `movies.raw_payload`. Idempotent; `--status` and `--remove` |
+| `experiments/graph_vs_vector.py` | the same factual question sent to both machines, side by side |
 | `eval_variants.py` · `eval_agent.py` | the two harnesses. See `docs/verification.md` |
 
 **One caution.** `api.py` parses `tools.py`'s plain-text output with a regular expression, so
@@ -191,7 +194,7 @@ python search.py "a father and son separated and trying to find each other"
 Two harnesses, measuring two different things.
 
 ```bash
-python eval_variants.py     # RETRIEVAL: achievable@3 and quiet@3 over a 30-case golden set
+python eval_variants.py     # RETRIEVAL: achievable@3 and quiet@3 over a 25-case golden set
 python eval_agent.py        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
 ```
 
@@ -207,18 +210,22 @@ goes to a judge, and the judge is deliberately not the model under test.
 
 | metric | value | meaning |
 |---|---|---|
-| achievable@3 | **81.0%** (34/42) | of the expected films that *can* fit in a top 3, how many do |
+| achievable@3 | **89.3%** (25/28) | of the expected films that *can* fit in a top 3, how many do |
 | quiet@3 | **0.2232** | top score on queries with no right answer — **lower is better** |
 | tool accuracy | **6/6** | exact |
 | grounding | **6/6** | exact — named no film a tool did not return |
-| faithfulness | judged | RAGAS, via OpenRouter |
+| faithfulness | **0.78 ± 0.02** | RAGAS via OpenRouter, 3 draws per case. **A change under 0.05 is noise** — see `docs/verification.md` |
 
 Two metrics, never one: anything that makes the system eager raises recall **and** false confidence.
 
-**Why `achievable@3` rather than plain recall@3.** Four cases in the golden set name more films
-than fit in a top 3, so raw recall@3 has a hard ceiling of 79.2% — it can never reach 100% however
-good retrieval gets. Dividing by `sum(min(len(expect), 3))` removes a penalty the system cannot
-avoid. The older 86.2% figure came from a 25-case set and a different denominator; it is void.
+**Why `achievable@3` rather than plain recall@3.** One case in the golden set names four films,
+so raw recall@3 cannot reach 100% however good retrieval gets. Dividing by
+`sum(min(len(expect), 3))` removes a penalty the system cannot avoid.
+
+**The numbers above are arm D** — the context header stored in the vector, which is what runs in
+production. Arm B (header everywhere) scores higher on achievable@3, **92.9%**, and worse on
+quiet@3, **0.2543** vs 0.2232. That is the trade in one line: the arm that finds more also
+asserts more on questions with no answer. Run `python eval_variants.py` to see all four.
 
 ### Experiments
 
@@ -277,9 +284,6 @@ in prose, and the model obeys them.
   threshold problem.
 - **Rerank scores are not stable run to run.** OpenRouter is a gateway; the same model id can land
   on a different backend. **Trust the gap between scores, not the absolute value.**
-- **The graph is not wired into retrieval yet.** Genre, cast, director and keyword edges exist
-  and are queryable in SQL, but no tool exposes them to the agent, so a question like *"anything
-  by Christopher Nolan"* still goes to the vector search that cannot answer it.
 - **The graph is thin on people.** Only 3 directors and 7 actors appear in more than one film, so
   "another film by this director" works for three directors. A graph's value scales with shared
   nodes, and 20 films is a small world.
