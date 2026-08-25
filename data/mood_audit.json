@@ -1,0 +1,502 @@
+[
+  {
+    "id": 1,
+    "type": "situation",
+    "query": "a movie where creatures chase and hunt people, very intense",
+    "expect": [
+      "Predator",
+      "Alien",
+      "Jurassic Park"
+    ],
+    "titles": [
+      "Predator",
+      "Jurassic Park",
+      "Alien"
+    ],
+    "found": 3,
+    "reach": 3,
+    "top_score": 0.6887
+  },
+  {
+    "id": 2,
+    "type": "plot",
+    "query": "a man wrongly imprisoned who never gives up",
+    "expect": [
+      "The Shawshank Redemption"
+    ],
+    "titles": [
+      "The Shawshank Redemption",
+      "Rocky",
+      "The Dark Knight"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.0302
+  },
+  {
+    "id": 3,
+    "type": "situation",
+    "query": "a father and son separated and trying to find each other",
+    "expect": [
+      "Finding Nemo"
+    ],
+    "titles": [
+      "Finding Nemo",
+      "Home Alone",
+      "The Shawshank Redemption"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.5816
+  },
+  {
+    "id": 4,
+    "type": "situation",
+    "query": "an underdog who trains hard to win a fight",
+    "expect": [
+      "Rocky",
+      "The Karate Kid"
+    ],
+    "titles": [
+      "Rocky",
+      "The Karate Kid",
+      "Mortal Kombat"
+    ],
+    "found": 2,
+    "reach": 2,
+    "top_score": 0.6518
+  },
+  {
+    "id": 5,
+    "type": "mood",
+    "query": "a cosy film about forgiveness",
+    "expect": [],
+    "titles": [
+      "The Shawshank Redemption",
+      "Inception",
+      "Crazy, Stupid, Love."
+    ],
+    "found": 0,
+    "reach": 0,
+    "top_score": 0.1592
+  },
+  {
+    "id": 6,
+    "type": "situation",
+    "query": "toys that secretly come alive when nobody is watching",
+    "expect": [
+      "Toy Story"
+    ],
+    "titles": [
+      "Toy Story",
+      "Terminator 2: Judgment Day",
+      "Jurassic Park"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.355
+  },
+  {
+    "id": 7,
+    "type": "situation",
+    "query": "a child left behind alone who defends the house from burglars",
+    "expect": [
+      "Home Alone"
+    ],
+    "titles": [
+      "Home Alone",
+      "Inception",
+      "Terminator 2: Judgment Day"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.0518
+  },
+  {
+    "id": 8,
+    "type": "situation",
+    "query": "a ship sinks and two lovers are torn apart",
+    "expect": [
+      "Titanic"
+    ],
+    "titles": [
+      "Titanic",
+      "Crazy, Stupid, Love.",
+      "Alien"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.9285
+  },
+  {
+    "id": 9,
+    "type": "situation",
+    "query": "an orphan boy discovers he is a wizard and goes to a magic school",
+    "expect": [
+      "Harry Potter and the Philosopher's Stone"
+    ],
+    "titles": [
+      "Harry Potter and the Philosopher's Stone",
+      "Spider-Man",
+      "Inception"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.207
+  },
+  {
+    "id": 10,
+    "type": "situation",
+    "query": "people entering a dream inside another dream to plant an idea",
+    "expect": [
+      "Inception"
+    ],
+    "titles": [
+      "Inception",
+      "Alien",
+      "The Shawshank Redemption"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.0742
+  },
+  {
+    "id": 11,
+    "type": "situation",
+    "query": "friends wake up with no memory of the night before and must retrace it",
+    "expect": [
+      "The Hangover"
+    ],
+    "titles": [
+      "The Hangover",
+      "Inception",
+      "Terminator 2: Judgment Day"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.1687
+  },
+  {
+    "id": 12,
+    "type": "situation",
+    "query": "a teenager gains powers after being bitten by a spider",
+    "expect": [
+      "Spider-Man"
+    ],
+    "titles": [
+      "Spider-Man",
+      "Terminator 2: Judgment Day",
+      "Logan"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.3519
+  },
+  {
+    "id": 13,
+    "type": "situation",
+    "query": "a machine sent back in time to protect a boy from another machine",
+    "expect": [
+      "Terminator 2: Judgment Day"
+    ],
+    "titles": [
+      "Terminator 2: Judgment Day",
+      "Inception",
+      "Logan"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.3261
+  },
+  {
+    "id": 14,
+    "type": "situation",
+    "query": "a weekend visit to the girlfriend's family turns sinister",
+    "expect": [
+      "Get Out"
+    ],
+    "titles": [
+      "Get Out",
+      "The Hangover",
+      "Inception"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.0374
+  },
+  {
+    "id": 15,
+    "type": "situation",
+    "query": "an alien creature loose on a spaceship killing the crew one by one",
+    "expect": [
+      "Alien"
+    ],
+    "titles": [
+      "Alien",
+      "Predator",
+      "Terminator 2: Judgment Day"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.1638
+  },
+  {
+    "id": 16,
+    "type": "situation",
+    "query": "an older mentor trains a bullied kid in martial arts",
+    "expect": [
+      "The Karate Kid"
+    ],
+    "titles": [
+      "The Karate Kid",
+      "Rocky",
+      "Mortal Kombat"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.6557
+  },
+  {
+    "id": 17,
+    "type": "situation",
+    "query": "fighters compete in a supernatural tournament to save their world",
+    "expect": [
+      "Mortal Kombat"
+    ],
+    "titles": [
+      "Mortal Kombat",
+      "Rocky",
+      "The Karate Kid"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.8392
+  },
+  {
+    "id": 18,
+    "type": "plot",
+    "query": "a dying man protects a young girl who shares his abilities",
+    "expect": [
+      "Logan"
+    ],
+    "titles": [
+      "Terminator 2: Judgment Day",
+      "Spider-Man",
+      "Logan"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.7498
+  },
+  {
+    "id": 19,
+    "type": "situation",
+    "query": "a man learns to date again after his wife asks for a divorce",
+    "expect": [
+      "Crazy, Stupid, Love."
+    ],
+    "titles": [
+      "Crazy, Stupid, Love.",
+      "The Shawshank Redemption",
+      "The Hangover"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.9393
+  },
+  {
+    "id": 20,
+    "type": "mood",
+    "query": "a dark story where the hero is pushed to compromise his principles",
+    "expect": [
+      "The Dark Knight",
+      "Logan"
+    ],
+    "titles": [
+      "The Dark Knight",
+      "Logan",
+      "The Shawshank Redemption"
+    ],
+    "found": 2,
+    "reach": 2,
+    "top_score": 0.2865
+  },
+  {
+    "id": 21,
+    "type": "mood",
+    "query": "something funny and light that will cheer me up",
+    "expect": [
+      "The Hangover",
+      "Crazy, Stupid, Love.",
+      "Home Alone",
+      "Toy Story"
+    ],
+    "titles": [
+      "The Shawshank Redemption",
+      "Spider-Man",
+      "Finding Nemo"
+    ],
+    "found": 0,
+    "reach": 3,
+    "top_score": 0.151
+  },
+  {
+    "id": 22,
+    "type": "mood",
+    "query": "a quiet film about ordinary family life with no danger in it",
+    "expect": [],
+    "titles": [
+      "Home Alone",
+      "Crazy, Stupid, Love.",
+      "The Shawshank Redemption"
+    ],
+    "found": 0,
+    "reach": 0,
+    "top_score": 0.4
+  },
+  {
+    "id": 23,
+    "type": "situation",
+    "query": "dinosaurs escape their enclosures and hunt visitors in a park",
+    "expect": [
+      "Jurassic Park"
+    ],
+    "titles": [
+      "Jurassic Park",
+      "Predator",
+      "Alien"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 1.2892
+  },
+  {
+    "id": 24,
+    "type": "situation",
+    "query": "a soldier hunted in the jungle by an invisible alien hunter",
+    "expect": [
+      "Predator"
+    ],
+    "titles": [
+      "Predator",
+      "Mortal Kombat",
+      "Alien"
+    ],
+    "found": 1,
+    "reach": 1,
+    "top_score": 0.8481
+  },
+  {
+    "id": 25,
+    "type": "no_answer",
+    "query": "a documentary about climate change and rising sea levels",
+    "expect": [],
+    "titles": [
+      "Terminator 2: Judgment Day",
+      "Finding Nemo",
+      "Predator"
+    ],
+    "found": 0,
+    "reach": 0,
+    "top_score": 0.1103
+  },
+  {
+    "id": 26,
+    "type": "mood",
+    "query": "a warm, comforting film for a rainy evening at home",
+    "expect": [
+      "Crazy, Stupid, Love.",
+      "Finding Nemo",
+      "Home Alone",
+      "The Hangover",
+      "Toy Story",
+      "The Shawshank Redemption"
+    ],
+    "titles": [
+      "The Shawshank Redemption",
+      "Titanic",
+      "Crazy, Stupid, Love."
+    ],
+    "found": 2,
+    "reach": 3,
+    "top_score": 0.2346
+  },
+  {
+    "id": 27,
+    "type": "mood",
+    "query": "something uplifting that leaves me feeling better than I started",
+    "expect": [
+      "Finding Nemo",
+      "Rocky",
+      "Spider-Man",
+      "The Karate Kid",
+      "Toy Story",
+      "The Dark Knight",
+      "The Shawshank Redemption"
+    ],
+    "titles": [
+      "The Shawshank Redemption",
+      "Spider-Man",
+      "Crazy, Stupid, Love."
+    ],
+    "found": 2,
+    "reach": 3,
+    "top_score": 0.1526
+  },
+  {
+    "id": 28,
+    "type": "mood",
+    "query": "something tense and stressful, the kind where you grip the armrest",
+    "expect": [
+      "Alien",
+      "Get Out",
+      "Predator",
+      "Terminator 2: Judgment Day",
+      "Jurassic Park",
+      "Mortal Kombat"
+    ],
+    "titles": [
+      "The Dark Knight",
+      "Terminator 2: Judgment Day",
+      "Predator"
+    ],
+    "found": 2,
+    "reach": 3,
+    "top_score": 0.1151
+  },
+  {
+    "id": 29,
+    "type": "mood",
+    "query": "a sad film that might make me cry",
+    "expect": [
+      "Logan",
+      "Titanic",
+      "The Shawshank Redemption"
+    ],
+    "titles": [
+      "The Shawshank Redemption",
+      "Titanic",
+      "Crazy, Stupid, Love."
+    ],
+    "found": 2,
+    "reach": 3,
+    "top_score": 0.5593
+  },
+  {
+    "id": 30,
+    "type": "mood",
+    "query": "something nostalgic that feels like childhood",
+    "expect": [
+      "Harry Potter and the Philosopher's Stone",
+      "Home Alone"
+    ],
+    "titles": [
+      "Terminator 2: Judgment Day",
+      "Titanic",
+      "Home Alone"
+    ],
+    "found": 1,
+    "reach": 2,
+    "top_score": 0.2475
+  }
+]

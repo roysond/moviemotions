@@ -1,26 +1,34 @@
 {
   "A  no header anywhere": {
-    "recall": 0.7586206896551724,
-    "hits": 22,
-    "expected": 29,
+    "recall": 0.5471698113207547,
+    "achievable": 0.6904761904761905,
+    "hits": 29,
+    "expected": 53,
+    "ceiling": 42,
     "quiet": 0.20609999999999998
   },
   "B  header everywhere": {
-    "recall": 0.896551724137931,
-    "hits": 26,
-    "expected": 29,
+    "recall": 0.6415094339622641,
+    "achievable": 0.8095238095238095,
+    "hits": 34,
+    "expected": 53,
+    "ceiling": 42,
     "quiet": 0.25433333333333336
   },
   "C  header at rerank only": {
-    "recall": 0.8275862068965517,
-    "hits": 24,
-    "expected": 29,
+    "recall": 0.5660377358490566,
+    "achievable": 0.7142857142857143,
+    "hits": 30,
+    "expected": 53,
+    "ceiling": 42,
     "quiet": 0.2754
   },
   "D  header in index only": {
-    "recall": 0.8620689655172413,
-    "hits": 25,
-    "expected": 29,
+    "recall": 0.6415094339622641,
+    "achievable": 0.8095238095238095,
+    "hits": 34,
+    "expected": 53,
+    "ceiling": 42,
     "quiet": 0.22316666666666665
   }
 }

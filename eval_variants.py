@@ -22,8 +22,13 @@ THE FOUR ARMS
     D  what ran accidentally after the migration, and scored well
 
 WHAT IS MEASURED
-    recall@3   of the expected films, how many appear in the top 3. The honest metric —
-               a bare pass/fail hides a 3-of-3 -> 1-of-3 decay.
+    achievable@3  of the answers that COULD have appeared in a top 3, how many did.
+               Only 3 films fit in a top 3, so a case listing 7 expected films can never be
+               fully satisfied — without this, "impossible" and "failed" look identical.
+               Added 24 Aug when the golden set grew mood cases with 6-7 answers each.
+    recall@3   of ALL expected films, how many appear in the top 3. Kept for continuity,
+               but its ceiling is now below 100% and it is NOT comparable to any figure
+               recorded before the golden set changed on 24 Aug.
     quiet@3    on no-answer cases, the top score. Semantic search ALWAYS returns something,
                so the only defence is a score low enough to distinguish "here you go" from
                "nothing here". Lower is better.
@@ -52,7 +57,7 @@ ARMS = [
 
 
 def run_arm(cases, config, vectors):
-    hits = expected = 0
+    hits = expected = ceiling = 0
     quiet_scores = []
     per_case = {}
     for case in cases:
@@ -65,13 +70,17 @@ def run_arm(cases, config, vectors):
             found = sum(1 for want in case["expect"] if want in titles)
             hits += found
             expected += len(case["expect"])
+            # Only TOP_N films fit in a top-N list, so a case with more expected answers
+            # than slots CANNOT be fully satisfied. The ceiling is what was reachable.
+            ceiling += min(len(case["expect"]), TOP_N)
             per_case[case["id"]] = (found, len(case["expect"]), titles, top_score)
         else:
             quiet_scores.append(top_score)
             per_case[case["id"]] = (None, 0, titles, top_score)
     return {
         "recall": hits / expected if expected else 0.0,
-        "hits": hits, "expected": expected,
+        "achievable": hits / ceiling if ceiling else 0.0,
+        "hits": hits, "expected": expected, "ceiling": ceiling,
         "quiet": sum(quiet_scores) / len(quiet_scores) if quiet_scores else 0.0,
         "per_case": per_case,
     }
@@ -99,15 +108,20 @@ def main():
     print("\n" + "=" * 78)
     print("SCOREBOARD")
     print("=" * 78)
-    print(f"  {'arm':28} {'recall@3':>10}  {'hits':>9}   {'quiet@3':>8}")
-    print(f"  {'-'*28} {'-'*10}  {'-'*9}   {'-'*8}")
-    best = max(results.values(), key=lambda r: r["recall"])["recall"]
+    any_arm = next(iter(results.values()))
+    print(f"  {'arm':28} {'achievable@3':>13} {'recall@3':>9}  {'hits':>9}   {'quiet@3':>8}")
+    print(f"  {'-'*28} {'-'*13} {'-'*9}  {'-'*9}   {'-'*8}")
+    best = max(results.values(), key=lambda r: r["achievable"])["achievable"]
     for label, r in results.items():
-        star = "  <-- best" if r["recall"] == best else ""
-        print(f"  {label:28} {r['recall']*100:9.1f}%  {r['hits']:4}/{r['expected']:<4}"
-              f"   {r['quiet']:8.4f}{star}")
-    print("\n  recall@3: higher is better.  quiet@3: LOWER is better "
-          "(top score on queries with no right answer).")
+        star = "  <-- best" if r["achievable"] == best else ""
+        print(f"  {label:28} {r['achievable']*100:12.1f}% {r['recall']*100:8.1f}%"
+              f"  {r['hits']:4}/{r['ceiling']:<4}   {r['quiet']:8.4f}{star}")
+    print(f"\n  achievable@3  hits / {any_arm['ceiling']} REACHABLE answers. "
+          f"THE HEADLINE — 100% means nothing more could have been surfaced at k={TOP_N}.")
+    print(f"  recall@3      hits / {any_arm['expected']} expected answers. Kept for continuity, "
+          f"but it can never reach 100%:")
+    print(f"                4 cases list more films than fit in a top {TOP_N}.")
+    print("  quiet@3       top score on queries with NO right answer. LOWER is better.")
 
     print("\n" + "=" * 78)
     print("WHERE THE ARMS DISAGREE  (cases scored differently by at least one arm)")
@@ -121,8 +135,10 @@ def main():
         print(f"       expect: {case['expect'] or '(nothing — should stay quiet)'}")
         for l in labels:
             found, total, titles, top = results[l]["per_case"][case["id"]]
-            mark = f"{found}/{total}" if found is not None else f"top={top:.3f}"
-            print(f"       {l:28} {mark:>8}   {', '.join(titles[:3])}")
+            reach = min(total, TOP_N) if total else 0
+            mark = f"{found}/{reach}" if found is not None else f"top={top:.3f}"
+            cap = f" (of {total} listed)" if total > TOP_N else ""
+            print(f"       {l:28} {mark:>8}{cap:15} {', '.join(titles[:3])}")
 
     with open("data/variant_results.json", "w") as f:
         json.dump({l: {k: v for k, v in r.items() if k != "per_case"}

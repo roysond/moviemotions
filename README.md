@@ -34,6 +34,22 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films �
 
 ---
 
+## Where the code lives
+
+| file | what it is |
+|---|---|
+| `core.py` | **the engine.** Embedding, the retrieval SQL, reranking, film collapse, exact title lookup. Everything else imports this; nothing here imports anything else in the repo |
+| `tools.py` | what the agent is allowed to do. The docstrings *are* the interface — only they travel to the model |
+| `agent.py` | the LangGraph loop: think → act → think → review. The conditional edge is the whole difference between a pipeline and an agent |
+| `api.py` | HTTP over the *same compiled graph*. No prompts, no tools, no logic. If it and `agent.py` ever disagree, one is a bug |
+| `build_graph.py` | derives the knowledge graph from `movies.raw_payload`. Idempotent; `--status` and `--remove` |
+| `eval_variants.py` · `eval_agent.py` | the two harnesses. See `docs/verification.md` |
+
+**One caution.** `api.py` parses `tools.py`'s plain-text output with a regular expression, so
+changing the tool's wording can silently break the web display with no error anywhere.
+
+---
+
 ## Requirements
 
 - **Python 3.11+**
@@ -101,12 +117,21 @@ psql moviemotions -c "CREATE EXTENSION IF NOT EXISTS vector;"
 psql moviemotions -f schema.sql
 ```
 
-`schema.sql` is structure only, no data. Three tables:
+`schema.sql` is structure only, no data. Five tables — three for retrieval, two for the graph:
 
 ```
 movies             one row per film     movie_id · title · release_date · runtime_minutes · context_header
 chunks             many rows per film   chunk_id · movie_id · source_field · chunk_index · content
 chunk_embeddings   one row per vector   embedding_id · chunk_id · model_id · embed_variant · embedding
+
+graph_nodes        one row per thing    node_key · node_type · name · properties
+graph_edges        one row per fact     from_key · to_key · edge_type · source · confidence
+```
+
+The graph tables live in their own file, applied separately:
+
+```bash
+psql moviemotions -f graph_schema.sql
 ```
 
 A key that joins two tables carries the **same column name in both** (`movie_id`, `chunk_id`), and
@@ -125,6 +150,7 @@ python load_corpus.py       # films + overview chunks                → Postgre
 python derive_corpus.py     # a model writes mood/theme text         → data/derived.json
 python load_derived.py      # derived text → chunks + embeddings
 python chunk_plots.py       # semantic → recursive → overlap chunking, embeds each chunk
+python build_graph.py       # films · people · genres · keywords → nodes + edges
 ```
 
 `chunk_plots.py` is resumable: it commits per film and caches vectors by content hash, so a rate
@@ -165,7 +191,7 @@ python search.py "a father and son separated and trying to find each other"
 Two harnesses, measuring two different things.
 
 ```bash
-python eval_variants.py     # RETRIEVAL: recall@3 and quiet@3 over a 25-query golden set
+python eval_variants.py     # RETRIEVAL: achievable@3 and quiet@3 over a 30-case golden set
 python eval_agent.py        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
 ```
 
@@ -181,13 +207,18 @@ goes to a judge, and the judge is deliberately not the model under test.
 
 | metric | value | meaning |
 |---|---|---|
-| recall@3 | **86.2%** (25/29) | of the expected films, how many land in the top 3 |
+| achievable@3 | **81.0%** (34/42) | of the expected films that *can* fit in a top 3, how many do |
 | quiet@3 | **0.2232** | top score on queries with no right answer — **lower is better** |
 | tool accuracy | **6/6** | exact |
 | grounding | **6/6** | exact — named no film a tool did not return |
 | faithfulness | judged | RAGAS, via OpenRouter |
 
 Two metrics, never one: anything that makes the system eager raises recall **and** false confidence.
+
+**Why `achievable@3` rather than plain recall@3.** Four cases in the golden set name more films
+than fit in a top 3, so raw recall@3 has a hard ceiling of 79.2% — it can never reach 100% however
+good retrieval gets. Dividing by `sum(min(len(expect), 3))` removes a penalty the system cannot
+avoid. The older 86.2% figure came from a 25-case set and a different denominator; it is void.
 
 ### Experiments
 
@@ -199,6 +230,7 @@ Two metrics, never one: anything that makes the system eager raises recall **and
 | `corpus_ablation.py` | what is each corpus worth? (leave-one-out) |
 | `db_audit.py` | read-only schema, row counts, integrity checks |
 | `genre_corpus.py` | the genre-as-corpus experiment — add, measure, remove |
+| `mood_audit.py` | which films dominate mood queries, and are they ever right? |
 
 ---
 
@@ -211,6 +243,7 @@ Two metrics, never one: anything that makes the system eager raises recall **and
 | `docs/ARCHITECTURE.html` | when you lose the shape of the system |
 | `docs/retrieval-pipeline.md` | the query path, end to end |
 | `docs/verifying-code.md` | how to verify a change you cannot read |
+| `docs/verification.md` | **start here before changing anything** — the baseline numbers, the one command that reproduces each, and what to re-test when a file changes |
 | `docs/change-guard.md` | the change protocol: contract → one variable → prove three ways |
 | `docs/third-party.md` | licence and terms for every external source |
 
@@ -244,7 +277,12 @@ in prose, and the model obeys them.
   threshold problem.
 - **Rerank scores are not stable run to run.** OpenRouter is a gateway; the same model id can land
   on a different backend. **Trust the gap between scores, not the absolute value.**
-- **No genre filter.** The data sits unused in `data/raw/` — there is no genre column yet.
+- **The graph is not wired into retrieval yet.** Genre, cast, director and keyword edges exist
+  and are queryable in SQL, but no tool exposes them to the agent, so a question like *"anything
+  by Christopher Nolan"* still goes to the vector search that cannot answer it.
+- **The graph is thin on people.** Only 3 directors and 7 actors appear in more than one film, so
+  "another film by this director" works for three directors. A graph's value scales with shared
+  nodes, and 20 films is a small world.
 - **Answer quality is at the small-model floor.** The agent model is strong at structured decisions
   and weak at prose. `BEDROCK_MODEL_AGENT` is the seam for swapping it.
 

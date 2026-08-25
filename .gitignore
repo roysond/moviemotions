@@ -26,6 +26,7 @@ data/raw/
 data/cache/
 *.sql
 !schema.sql
+!graph_schema.sql
 *.dump
 
 # ─── Editor & OS noise ──────────────────────────────────────────

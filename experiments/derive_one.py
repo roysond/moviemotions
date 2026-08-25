@@ -1,6 +1,5 @@
 """Ask a model to describe a film's mood and themes from its overview."""
 
-import json
 import os
 
 import boto3

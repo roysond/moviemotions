@@ -71,7 +71,7 @@ BASE = "all four"
 
 
 def run_arm(cases, sources, vectors):
-    hits = expected = 0
+    hits = expected = ceiling = 0
     quiet, per_case = [], {}
     for case in cases:
         films = search(case["query"], limit=TOP_N, query_vector=vectors[case["id"]],
@@ -84,13 +84,15 @@ def run_arm(cases, sources, vectors):
             found = sum(1 for want in case["expect"] if want in titles)
             hits += found
             expected += len(case["expect"])
+            ceiling += min(len(case["expect"]), TOP_N)   # only TOP_N films fit in a top-N
             per_case[case["id"]] = (found, len(case["expect"]), titles, top, srcs)
         else:
             quiet.append(top)
             per_case[case["id"]] = (None, 0, titles, top, srcs)
     return {
         "recall": hits / expected if expected else 0.0,
-        "hits": hits, "expected": expected,
+        "achievable": hits / ceiling if ceiling else 0.0,
+        "hits": hits, "expected": expected, "ceiling": ceiling,
         "quiet": sum(quiet) / len(quiet) if quiet else 0.0,
         "per_case": per_case,
     }
@@ -118,11 +120,12 @@ def main():
     print("\n" + "=" * 78)
     print("SCOREBOARD")
     print("=" * 78)
-    print(f"  {'arm':14} {'recall@3':>9}  {'hits':>9}   {'quiet@3':>8}")
-    print(f"  {'-'*14} {'-'*9}  {'-'*9}   {'-'*8}")
+    print(f"  {'arm':14} {'achievable@3':>13} {'recall@3':>9}  {'hits':>9}   {'quiet@3':>8}")
+    print(f"  {'-'*14} {'-'*13} {'-'*9}  {'-'*9}   {'-'*8}")
     for label, r in results.items():
-        print(f"  {label:14} {r['recall']*100:8.1f}%  {r['hits']:4}/{r['expected']:<4}"
-              f"   {r['quiet']:8.4f}")
+        print(f"  {label:14} {r['achievable']*100:12.1f}% {r['recall']*100:8.1f}%"
+              f"  {r['hits']:4}/{r['ceiling']:<4}   {r['quiet']:8.4f}")
+    print("\n  achievable@3 = hits / REACHABLE answers — the headline. See eval_variants.py.")
 
     print("\n" + "=" * 78)
     print("WHAT EACH CORPUS IS WORTH  (answers lost when it is removed)")
