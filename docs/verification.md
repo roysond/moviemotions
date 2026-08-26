@@ -154,6 +154,14 @@ no crash, just an empty panel. Nothing in the type system connects those two fil
 
 **A more expensive judge does not help.** See the faithfulness section above.
 
+**EVIDENCE_CHARS 320 -> 640: INCONCLUSIVE, kept anyway. 25 Aug 2026.**
+Faithfulness 0.72 -> 0.76, which is inside the +/-0.03-0.05 noise floor. Exact metrics
+unchanged at 8/8. Only 5 of 23 evidence strings were affected — 18 were already shorter
+than 320 characters, mean length 213. **An underpowered experiment, not a failed one:**
+the effect is below what 6 judged cases can resolve. Kept on mechanical grounds — cutting
+a sentence in half can only remove support, never add it — and explicitly NOT recorded as
+an improvement. To get a verdict you would need more judged cases, not more runs.
+
 ---
 
 ## Known open issues

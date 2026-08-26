@@ -15,7 +15,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DIMENSIONS = 1024
-EVIDENCE_CHARS = 320   # how much matched text travels back with each film
+# How much matched text travels back with each film.
+#
+# Was 320. Measured on the 8-case agent eval: 5 of 23 evidence strings were being cut
+# at exactly that limit — roughly a fifth of the evidence stopped mid-sentence. A claim
+# can be true, present in the source, and still score 0 for faithfulness because the
+# sentence that supported it never reached the judge.
+#
+# The cost of raising it is real but opposite: more text is more raw material for the
+# model to embroider on. Baseline before the change: faithfulness 0.72 over 6 judged
+# cases, tool accuracy 8/8.
+EVIDENCE_CHARS = 640
 MODEL_ID = os.environ["BEDROCK_MODEL_EMBED_NOVA"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 REGION = os.environ["AWS_REGION"]
