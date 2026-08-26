@@ -210,6 +210,25 @@ no vendor knows your business rules.*
 
 ---
 
+## Pass 3 — the graph, and learning to trust the instruments
+
+| Decision | Why |
+|---|---|
+| **Genre becomes a NODE, not a column** | A column answers "is this Horror?". An edge also answers "which films share the most genres with Alien?" and "what connects these two films?". The moment you want to ask *what else is connected*, you needed an edge |
+| **The graph derives from `movies.raw_payload`, not from `data/raw/`** | Reading the files would let the graph describe films that are not in `movies`. Reading the stored payload makes drift impossible |
+| **The graph returns no scores** | A person either directed a film or did not. Attaching a confidence to a fact invites the caller to doubt it |
+| **Three tools with disjoint triggers** — a description, one title, or a name/category | Two tools with a blurry boundary make a model oscillate. Each rule keys off a different thing in the sentence |
+| **Every tool returns the text it matched on** | A tool that returns no evidence leaves a gap, and a model fills gaps from training. Learned twice: once for `search_films`, then repeated in `find_films_by_fact` a month later |
+| **CI holds no credentials, ever** | A workflow with AWS keys is a workflow that can leak them, and a fork's pull request could read them. CI checks structure; the evals check behaviour on a machine that already has the keys |
+| **The gate was proven to FAIL before it was trusted to pass** | Five deliberate breaks. That test found a bug in the checker itself — a syntax error crashed the run, so it exited 1 for the wrong reason, which reads exactly like working |
+| **Faithfulness is reported with error bars, or not at all** | The same frozen answers scored 0.87 / 0.75 / 0.79. RAGAS decomposes an answer into claims with an LLM call, so the denominator itself moves. One draw is not a measurement |
+| **A metric that fails must get LOUDER, not quieter** | A judge error printed one line and shrank the denominator, which *raised* the mean. A broken judge made the system look better |
+| **Settled experiments get written down** | A bigger agent model is worse here; a 10x more expensive judge is not better. Both measured, both recorded, so neither is retried on a hunch |
+| **An underpowered experiment is not a failed one** | Raising `EVIDENCE_CHARS` moved faithfulness less than the noise floor. Kept on mechanical grounds, explicitly not recorded as an improvement |
+| **Ground truth about meaning comes from the human** | Which films *feel* warm, and whether a T-800 counts as a creature, are not facts a model can look up. Royson supplied both, and both changed the diagnosis |
+
+---
+
 ## Four things worth remembering above all
 
 1. **RAG is a noun, agentic is a verb.** A pipeline versus a loop. Retrieval is one tool the loop can use.

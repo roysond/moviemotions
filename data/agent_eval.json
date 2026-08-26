@@ -16,7 +16,7 @@
   {
     "id": 2,
     "query": "I want something where creatures are hunting people, really tense",
-    "answer": "Predator is a good fit because it features a technologically advanced predator stalking and hunting a team of humans in a tense and frightening environment. \n\nTerminator 2: Judgment Day also fits the description, with a reprogrammed T-800 protecting John Connor from a new, shape-shifting enemy, creating a tense atmosphere of survival and danger.\n\nIf you're looking for something with a more intense and gory tone, Alien could be a good recommendation, as it involves a crew facing a terrifying and deadly alien creature in a foreboding and suspenseful setting.\n\nThese films all involve creatures hunting people in tense situations, so you have several strong options to choose from.",
+    "answer": "Based on the results from the search, here are some recommendations for a tense film where creatures are hunting people:\n\n1. **Predator (1987)**\n   *A technologically advanced, humanoid predator stalks a team of soldiers, using its cloaking device and thermal vision to hunt them down.*\n\n2. **Terminator 2: Judgment Day (1991)**\n   *A reprogrammed T-800 Terminator is sent back in time to protect young John Connor from a new, shape-shifting T-1000 Terminator.*\n\nWhile the other films also have elements of tension and danger, these two are the closest matches to your request.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
@@ -24,8 +24,7 @@
     "missing": [],
     "named": [
       "Terminator 2: Judgment Day",
-      "Predator",
-      "Alien"
+      "Predator"
     ],
     "is_refusal": false
   },
@@ -44,7 +43,7 @@
   {
     "id": 4,
     "query": "a man wrongly imprisoned who never gives up",
-    "answer": "The top result, \"The Shawshank Redemption,\" fits the description of a gripping, emotional film about a man who is wrongly imprisoned and fights to prove his innocence, never giving up. Here's why it's a good fit:\n\n\"Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison, where he puts his accounting skills to work for an amoral warden. During his long stretch in prison, Dufresne comes to be admired by the other inmates -- including an older\"\n\nThis film is a genuine match for what you're looking for.",
+    "answer": "The top result for a film about a man wrongly imprisoned who never gives up is \"The Shawshank Redemption\" (1994).\n\n**The Shawshank Redemption is a good fit because** it tells the story of Andy Dufresne, an upstanding banker who is wrongly imprisoned for the double murder of his wife and her lover. Despite the harsh conditions of Shawshank prison, Dufresne maintains his integrity and hope, inspiring those around him.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
@@ -84,7 +83,7 @@
   {
     "id": 7,
     "query": "anything by Christopher Nolan?",
-    "answer": "Here are some films by Christopher Nolan:\n\n- **Inception (2010)**\n  *A skilled thief who commits corporate espionage by infiltrating the subconscious of his targets is offered a chance to regain his old life as payment for a task considered to be impossible: inception, the implantation of another person's idea into a target's subconscious.*\n\n- **The Dark Knight (2008)**\n  *Batman raises the stakes in his war on crime. With the help of Lt. Jim Gordon and District Attorney Harvey Dent, Batman sets out to dismantle the remaining criminal organizations that plague the streets. The partnership proves to be effective, but they soon find themselves prey to a reign of chaos unleashed by a rising...*",
+    "answer": "Here are some films by Christopher Nolan:\n\n**Inception (2010)**\nA skilled thief who commits corporate espionage by infiltrating the subconscious of his targets is offered a chance to regain his old life as payment for a task considered to be impossible: \"inception\", the implantation of another person's idea into a target's subconscious.\n\n**The Dark Knight (2008)**\nBatman raises the stakes in his war on crime. With the help of Lt. Jim Gordon and District Attorney Harvey Dent, Batman sets out to dismantle the remaining criminal organizations that plague the streets. The partnership proves to be effective, but they soon find themselves prey to a reign of chaos unleashed by a rising criminal mastermind known to the terrified citizens of Gotham as the Joker.\n\nThese films are known for their complex narratives and thought-provoking themes.",
     "tool_ok": true,
     "tool_called": "find_films_by_fact",
     "tool_expected": "find_films_by_fact",
@@ -99,7 +98,7 @@
   {
     "id": 8,
     "query": "something like Jurassic Park but more intense",
-    "answer": "Given the request for something like \"Jurassic Park\" but more intense, here are the films that fit the description:\n\n**Predator (1987)**\nA team of elite commandos on a secret mission in a Central American jungle come to find themselves hunted by an extraterrestrial warrior. This film matches the intense and frightening theme, with a focus on survival against a formidable alien predator.\n\n**Alien (1979)**\nTense and foreboding. Moods: suspense, horror, danger. Themes: alien invasion, survival, discovery. This classic horror film features a crew on a spaceship who encounter a deadly alien creature, fitting the intense and frightening criteria.\n\nThese films are the closest matches to the description provided.",
+    "answer": "Given the request for something like \"Jurassic Park but more intense,\" here are the films that fit the description:\n\n**Predator (1987)**\nA team of elite commandos on a secret mission in a Central American jungle come to find themselves hunted by an extraterrestrial warrior. This film shares the intense, frightening experience of being hunted by dangerous creatures.\n\n**Alien (1979)**\nTense and foreboding. Moods: suspense, horror, danger. Themes: alien invasion, survival, discovery. This film also fits the description with its intense and frightening atmosphere.\n\nIf you're looking for something similar to \"Jurassic Park\" but with a more intense feel, these two films are the closest matches.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
