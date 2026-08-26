@@ -296,6 +296,27 @@ go and read; they are never a result. Full method in <code>docs/verification.md<
   <tr><td><code>db_audit.py</code></td><td>Read-only schema, row counts, integrity checks.</td></tr>
 </table>
 
+<h2>Continuous integration</h2>
+<p><code>.github/workflows/ci.yml</code> runs on every pull request. Two jobs, two different
+questions.</p>
+<pre><code>python repo_check.py     # the same structural checks CI runs — run it before you push</code></pre>
+<table class="wide">
+  <tr><th>job</th><th>what it asks</th></tr>
+  <tr><td><b>Structure</b></td><td>Does every module parse? Is every third-party import pinned?
+      Does <code>.env.example</code> match what the code reads? Does any doc point at a file that
+      doesn't exist? Has anything secret-shaped been committed? Does <code>.gitignore</code>
+      protect <code>.env</code> without swallowing a schema file?</td></tr>
+  <tr><td><b>Dependencies</b></td><td>Does <code>requirements.txt</code> actually install on a
+      clean machine, and does the third-party stack import?</td></tr>
+</table>
+<div class="note warn"><b>CI holds no credentials and never will.</b> A workflow with your AWS keys
+is a workflow that can leak them, and a pull request from a fork could read them. CI checks
+<em>structure</em>; the evals check <em>behaviour</em>, on a machine where the keys already live.</div>
+<p>Every check exists because it caught something real — the <code>.gitignore</code> rule that
+silently excluded <code>graph_schema.sql</code>, three environment variables the code required and
+the template omitted, a doc pointing at a file that no longer existed. Found by hand once, then
+written down so they cannot recur.</p>
+
 <h2>Documentation</h2>
 <table>
   <tr><th>file</th><th>read it when</th></tr>
@@ -346,8 +367,6 @@ live in prose, and the model obeys them.</p>
       film. A graph's value scales with shared nodes, and 20 films is a small world.</li>
   <li><b>Answer quality is at the small-model floor.</b> The agent model is strong at structured
       decisions and weak at prose. <code>BEDROCK_MODEL_AGENT</code> is the seam for swapping it.</li>
-  <li><b>No CI gate.</b> There is no <code>.github/workflows/</code>, so nothing runs automatically
-      on a pull request.</li>
 </ul>
 
 <h2>Third-party data and licences</h2>

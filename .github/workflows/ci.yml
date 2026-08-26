@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — what a machine checks on every pull request, before a human looks.
+#
+# THIS FILE IS THE GATE. Configuration as code: it lives in the repository, it is
+# reviewed in the same pull request as the change it guards, and its history is the
+# history of what "acceptable" has meant over time.
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+#   It never touches Postgres, Bedrock or OpenRouter, and it holds no secrets.
+#   A workflow with your AWS keys in it is a workflow that can leak them, and a
+#   pull request from a fork would be able to read them.
+#
+#   So CI checks STRUCTURE — does it parse, is everything declared, did a secret
+#   slip in, does the documentation point at real files. BEHAVIOUR is checked by
+#   eval_variants.py and eval_agent.py, which you run on your own machine where
+#   the credentials already live.
+#
+#   Two jobs, two different questions. Do not merge them.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  pull_request:              # the gate: every PR into any branch
+  push:
+    branches: [main]         # and a safety net on main itself
+
+# A second push to the same branch cancels the first run still in flight.
+# Without this, three quick commits queue three full runs and you wait for stale ones.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Job 1 · fast. No installs, so it fails in seconds when it fails. ──────
+  structure:
+    name: Structure checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # repo_check.py imports nothing outside the standard library, on purpose.
+      # A gate that needs a dependency install can be broken BY a dependency.
+      - name: Run repo_check.py
+        run: python repo_check.py
+
+  # ── Job 2 · slow. Proves requirements.txt actually resolves. ──────────────
+  dependencies:
+    name: Dependencies resolve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip                    # reuse the download cache between runs
+
+      # requirements.txt was once stale AND wrong — 53 packages declared against 102
+      # installed, and one version that did not match reality. This is the check that
+      # would have caught it: a clean machine, installing only what the file claims.
+      - name: Install from requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Import-only smoke test. These modules must not need credentials to import.
+      # If one starts reading os.environ at import time, this fails and tells you —
+      # which is itself worth knowing, because it would break every fresh clone.
+      - name: Confirm the third-party stack imports
+        run: |
+          python -c "
+          import langgraph, langchain_core, langchain_aws, psycopg, fastapi, boto3
+          print('core third-party imports OK')
+          "

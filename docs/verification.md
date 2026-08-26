@@ -72,6 +72,7 @@ any single unreproduced result as an anecdote.
 ## 2. The runner — one command each
 
 ```bash
+python repo_check.py         # structure: syntax, pins, env parity, dead refs, secrets
 python eval_variants.py      # retrieval: achievable@3 and quiet@3 over data/golden_set.json
 python eval_agent.py         # the agent: tool accuracy, grounding, RAGAS faithfulness
 python build_graph.py --status   # the graph: node and edge counts by type
@@ -106,6 +107,7 @@ python build_graph.py --status
 | `agent.py` | `api.py`, `eval_agent.py` |
 | `api.py` | `static/index.html` only |
 | `build_graph.py` / `graph_schema.sql` | `core.graph_find`, `tools.find_films_by_fact`, `eval_agent.py` |
+| `repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
 | `data/golden_set.json` | `eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
 | the corpus (`derive_corpus.py`, `chunk_plots.py`) | re-embed, then **both** evals |
 
@@ -123,4 +125,6 @@ no crash, just an empty panel. Nothing in the type system connects those two fil
   feels — this is emotional-density matching, not mood matching.
 - **Case 22 scores 0.400 on a no-answer query**, which falls inside the "recommend it
   plainly" band. False confidence, distinct from the mood problem.
-- **No CI gate.** There is no `.github/workflows/`, so nothing runs automatically on a PR.
+- **CI covers structure only, by design.** `.github/workflows/ci.yml` runs `repo_check.py` and a
+  clean dependency install on every pull request. It holds no credentials, so it cannot run the
+  evals — those stay manual, on a machine that has the keys.
