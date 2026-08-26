@@ -100,9 +100,9 @@ are all in this repository.</p>
   <div class="card" style="--ac:var(--p1)"><div class="k">quiet@3 · lower better</div>
     <div class="v">0.2232</div><div class="n">confidence on no-answer queries</div></div>
   <div class="card" style="--ac:var(--p2)"><div class="k">tool accuracy</div>
-    <div class="v">6/6</div><div class="n">exact, no judge involved</div></div>
+    <div class="v">8/8</div><div class="n">exact, no judge involved</div></div>
   <div class="card" style="--ac:var(--p3)"><div class="k">faithfulness</div>
-    <div class="v">0.78</div><div class="n">±0.02 · under 0.05 is noise</div></div>
+    <div class="v">0.72</div><div class="n">6 of 8 cases · under 0.05 is noise</div></div>
 </div>
 
 <h2>What it does that a plain RAG pipeline doesn't</h2>
@@ -263,10 +263,10 @@ and only it — goes to a judge, and the judge is deliberately not the model und
       <td>Of the expected films that <em>can</em> fit in a top 3, how many do.</td></tr>
   <tr><td>quiet@3</td><td><b>0.2232</b></td>
       <td>Top score on queries with no right answer — <b>lower is better</b>.</td></tr>
-  <tr><td>tool accuracy</td><td><b>6/6</b></td><td>Exact.</td></tr>
-  <tr><td>grounding</td><td><b>6/6</b></td><td>Exact — named no film a tool did not return.</td></tr>
-  <tr><td>faithfulness</td><td><b>0.78 ± 0.02</b></td>
-      <td>RAGAS via OpenRouter, 3 draws per case. <b>A change under 0.05 is noise.</b></td></tr>
+  <tr><td>tool accuracy</td><td><b>8/8</b></td><td>Exact.</td></tr>
+  <tr><td>grounding</td><td><b>8/8</b></td><td>Exact — named no film a tool did not return.</td></tr>
+  <tr><td>faithfulness</td><td><b>0.72</b></td>
+      <td>RAGAS via OpenRouter, 3 draws per case, 6 of 8 cases judged. <b>A change under 0.05 is noise.</b></td></tr>
 </table>
 <p><b>Two metrics, never one:</b> anything that makes the system eager raises recall
 <em>and</em> false confidence.</p>

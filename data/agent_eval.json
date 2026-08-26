@@ -2,7 +2,7 @@
   {
     "id": 1,
     "query": "tell me about Predator",
-    "answer": "Predator (1987) is a 107-minute film where a team of elite commandos on a secret mission in a Central American jungle find themselves hunted by an extraterrestrial warrior.",
+    "answer": "Here's what I found about \"Predator\":\n\n\"Predator (1987) \u00b7 107 min\nA team of elite commandos on a secret mission in a Central American jungle come to find themselves hunted by an extraterrestrial warrior.\"\n\nIf you need more details or have any other questions, feel free to ask!",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -16,7 +16,7 @@
   {
     "id": 2,
     "query": "I want something where creatures are hunting people, really tense",
-    "answer": "Predator is a good fit because it features a technologically advanced predator stalking and hunting humans in a tense and frightening environment. \n\nTerminator 2: Judgment Day also fits the description, as it involves a relentless terminator hunting down John Connor, creating a tense atmosphere.\n\nIf you're looking for something more intense, Alien could be a good recommendation, as it's a tense and foreboding film about a crew encountering dangerous extraterrestrial life.\n\nHere are the films that match your request:\n\n**Predator** because it involves a technologically advanced predator stalking and hunting humans in a tense and frightening environment.\n\n**Terminator 2: Judgment Day** because it features a relentless terminator hunting down John Connor, creating a tense atmosphere.\n\n**Alien** because it's a tense and foreboding film about a crew encountering dangerous extraterrestrial life.",
+    "answer": "Predator is a good fit because it features a technologically advanced predator stalking and hunting a team of humans in a tense and frightening environment. \n\nTerminator 2: Judgment Day also fits the description, with a reprogrammed T-800 protecting John Connor from a new, shape-shifting enemy, creating a tense atmosphere of survival and danger.\n\nIf you're looking for something with a more intense and gory tone, Alien could be a good recommendation, as it involves a crew facing a terrifying and deadly alien creature in a foreboding and suspenseful setting.\n\nThese films all involve creatures hunting people in tense situations, so you have several strong options to choose from.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
@@ -32,7 +32,7 @@
   {
     "id": 3,
     "query": "do you have The Godfather?",
-    "answer": "Sorry, but 'The Godfather' is not in the catalogue. This was an exact lookup, not a guess, so the film really is absent. If you need details on a different film, just let me know!",
+    "answer": "I'm sorry, but 'The Godfather' is not in the catalogue. This was an exact lookup, not a guess, so the film really is absent. If you need information on another film, I'd be happy to help with that.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -44,25 +44,24 @@
   {
     "id": 4,
     "query": "a man wrongly imprisoned who never gives up",
-    "answer": "The most fitting film from the results is \"The Shawshank Redemption\" because it closely matches the description of a gripping, emotional story about a man who is wrongly imprisoned and fights to prove his innocence without ever giving up hope.\n\nHere's why it fits:\n\"Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison, where he puts his accounting skills to work for an amoral warden. During his long stretch in prison, Dufresne comes to be admired by the other inmates -- including an older\"\n\nIf you're looking for something similar but not exactly the same, \"Rocky\" also features a protagonist who doesn't give up despite the odds, but it's more about a boxer's journey rather than a man wrongly imprisoned.\n\nSo, my recommendation is:\n\n**The Shawshank Redemption** is a gripping, emotional story about a man wrongly imprisoned who fights to prove his innocence without ever giving up hope.",
+    "answer": "The top result, \"The Shawshank Redemption,\" fits the description of a gripping, emotional film about a man who is wrongly imprisoned and fights to prove his innocence, never giving up. Here's why it's a good fit:\n\n\"Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison, where he puts his accounting skills to work for an amoral warden. During his long stretch in prison, Dufresne comes to be admired by the other inmates -- including an older\"\n\nThis film is a genuine match for what you're looking for.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
     "ungrounded": [],
     "missing": [],
     "named": [
-      "The Shawshank Redemption",
-      "Rocky"
+      "The Shawshank Redemption"
     ],
     "is_refusal": false
   },
   {
     "id": 5,
     "query": "do you have a documentary about climate change?",
-    "answer": "I don't have any documentaries about climate change in my catalogue. The results I found were all action or adventure films, not documentaries on the topic you asked for. If you need recommendations on a different type of film, I'm here to help.",
+    "answer": "I don't have any documentaries about climate change in my catalogue. The results I found were all action or sci-fi films, which do not match the topic you're looking for. If you need recommendations on a different type of film, I'm here to help!",
     "tool_ok": true,
     "tool_called": "search_films",
-    "tool_expected": "search_films",
+    "tool_expected": "find_films_by_fact or search_films",
     "ungrounded": [],
     "missing": [],
     "named": [],
@@ -71,7 +70,7 @@
   {
     "id": 6,
     "query": "how long is Titanic?",
-    "answer": "\"Titanic\" is a 1997 film that runs for 194 minutes. The story is told by 101-year-old Rose DeWitt Bukater, recounting her experiences aboard the Titanic, from its departure to its tragic sinking on April 15, 1912.",
+    "answer": "\"Titanic\" is a 1997 film that runs for 194 minutes. The story is narrated by a 101-year-old Rose DeWitt Bukater, recounting her experiences aboard the Titanic, from its departure to its tragic sinking on April 15, 1912.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -79,6 +78,37 @@
     "missing": [],
     "named": [
       "Titanic"
+    ],
+    "is_refusal": false
+  },
+  {
+    "id": 7,
+    "query": "anything by Christopher Nolan?",
+    "answer": "Here are some films by Christopher Nolan:\n\n- **Inception (2010)**\n  *A skilled thief who commits corporate espionage by infiltrating the subconscious of his targets is offered a chance to regain his old life as payment for a task considered to be impossible: inception, the implantation of another person's idea into a target's subconscious.*\n\n- **The Dark Knight (2008)**\n  *Batman raises the stakes in his war on crime. With the help of Lt. Jim Gordon and District Attorney Harvey Dent, Batman sets out to dismantle the remaining criminal organizations that plague the streets. The partnership proves to be effective, but they soon find themselves prey to a reign of chaos unleashed by a rising...*",
+    "tool_ok": true,
+    "tool_called": "find_films_by_fact",
+    "tool_expected": "find_films_by_fact",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "The Dark Knight",
+      "Inception"
+    ],
+    "is_refusal": false
+  },
+  {
+    "id": 8,
+    "query": "something like Jurassic Park but more intense",
+    "answer": "Given the request for something like \"Jurassic Park\" but more intense, here are the films that fit the description:\n\n**Predator (1987)**\nA team of elite commandos on a secret mission in a Central American jungle come to find themselves hunted by an extraterrestrial warrior. This film matches the intense and frightening theme, with a focus on survival against a formidable alien predator.\n\n**Alien (1979)**\nTense and foreboding. Moods: suspense, horror, danger. Themes: alien invasion, survival, discovery. This classic horror film features a crew on a spaceship who encounter a deadly alien creature, fitting the intense and frightening criteria.\n\nThese films are the closest matches to the description provided.",
+    "tool_ok": true,
+    "tool_called": "search_films",
+    "tool_expected": "search_films",
+    "ungrounded": [],
+    "missing": [],
+    "named": [
+      "Jurassic Park",
+      "Predator",
+      "Alien"
     ],
     "is_refusal": false
   }

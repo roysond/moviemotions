@@ -100,8 +100,14 @@ def search_films(
                     Park, the film they asked to move past. Everything else scores
                     near zero because nothing else has dinosaurs.
           RIGHT  query="a tense, frightening film where people are hunted by
-                        dangerous creatures and barely escape being killed",
+                        dangerous creatures",
                  exclude_title="Jurassic Park"
+
+    Expand, but do not pile on. Every clause you add is a separate thing the ranker
+    can score, and a film can win on one while failing the other. Measured: adding
+    "and barely escape being killed" to the query above lifted Terminator 2 from 4th
+    to 2nd (0.304 -> 0.449) and left Alien flat — because a T-800 is not a creature,
+    but a shopping-mall chase is very much a narrow escape. One idea per query.
 
     Only keep the subject matter when the USER asked for it — "another film with
     dinosaurs" means dinosaurs; "something like Jurassic Park" means the feeling.
@@ -133,6 +139,11 @@ def search_films(
     filters = {
         "max_runtime": max_runtime, "min_runtime": min_runtime,
         "after_year": after_year, "before_year": before_year,
+        # Was declared in the signature and the docstring, enforced in SQL, and NOT
+        # passed through these six lines — so the model set it, the tool accepted it,
+        # and the excluded film came back anyway. A silently ignored argument is worse
+        # than a missing one: everything reports success.
+        "exclude_title": exclude_title,
     }
     asked = {k: v for k, v in filters.items() if v is not None}
     films = search(query, limit=MAX_RESULTS, **filters)

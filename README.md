@@ -213,9 +213,9 @@ goes to a judge, and the judge is deliberately not the model under test.
 |---|---|---|
 | achievable@3 | **89.3%** (25/28) | of the expected films that *can* fit in a top 3, how many do |
 | quiet@3 | **0.2232** | top score on queries with no right answer — **lower is better** |
-| tool accuracy | **6/6** | exact |
-| grounding | **6/6** | exact — named no film a tool did not return |
-| faithfulness | **0.78 ± 0.02** | RAGAS via OpenRouter, 3 draws per case. **A change under 0.05 is noise** — see `docs/verification.md` |
+| tool accuracy | **8/8** | exact |
+| grounding | **8/8** | exact — named no film a tool did not return |
+| faithfulness | **0.72** | RAGAS via OpenRouter, 3 draws per case, 6 of 8 cases judged. **A change under 0.05 is noise** — see `docs/verification.md` |
 
 Two metrics, never one: anything that makes the system eager raises recall **and** false confidence.
 

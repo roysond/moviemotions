@@ -97,10 +97,26 @@ CASES = [
      "tool": "lookup_film",  "expect": []},
     {"id": 4, "query": "a man wrongly imprisoned who never gives up",
      "tool": "search_films", "expect": ["The Shawshank Redemption"]},
+    # "documentary" is BOTH a description and a genre word, so two tools are defensible
+    # and both reach the same correct refusal. This case was written when only two tools
+    # existed; nova-pro chose find_films_by_fact, followed the documented rule, and was
+    # marked wrong by a stale expectation. A test that punishes the right answer is a
+    # broken test. `tool` accepts a set where the ambiguity is genuine.
     {"id": 5, "query": "do you have a documentary about climate change?",
-     "tool": "search_films", "expect": []},
+     "tool": {"search_films", "find_films_by_fact"}, "expect": []},
     {"id": 6, "query": "how long is Titanic?",
      "tool": "lookup_film",  "expect": ["Titanic"]},
+    # Nothing above exercises the graph. Added after find_films_by_fact shipped with
+    # ZERO test coverage — the tool that answers factual questions had never once been
+    # required by an eval. Deterministic: an edge either exists or it does not.
+    {"id": 7, "query": "anything by Christopher Nolan?",
+     "tool": "find_films_by_fact",
+     "expect": ["Inception", "The Dark Knight"]},
+    # The hybrid shape: a named film AND a description. This is the case whose fix
+    # shipped untested, and whose exclude_title argument was silently dropped for
+    # an hour without any eval noticing.
+    {"id": 8, "query": "something like Jurassic Park but more intense",
+     "tool": "search_films", "expect": ["Predator"]},
 ]
 
 
@@ -222,9 +238,12 @@ def main():
         rows.append({
             "id": case["id"], "query": case["query"], "answer": answer,
             "contexts": contexts,
-            "tool_ok": bool(tools) and tools[0] == case["tool"],
+            # `tool` is a string, or a set when more than one route is genuinely right.
+            "tool_ok": bool(tools) and tools[0] in (
+                case["tool"] if isinstance(case["tool"], set) else {case["tool"]}),
             "tool_called": tools[0] if tools else "(none)",
-            "tool_expected": case["tool"],
+            "tool_expected": (" or ".join(sorted(case["tool"]))
+                              if isinstance(case["tool"], set) else case["tool"]),
             # every film named must have been returned by a tool in THIS conversation
             "ungrounded": [t for t in named if t not in retrieved],
             "missing": [t for t in case["expect"] if t not in named],

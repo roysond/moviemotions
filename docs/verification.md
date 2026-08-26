@@ -11,13 +11,19 @@ The four things `docs/change-guard.md` asks for at project start, kept current.
 |---|---|---|---|
 | achievable@3 | **89.3%** (25 / 28) | of the expected films that *can* fit in a top 3, how many do | higher |
 | quiet@3 | **0.2232** | top score on queries that have no right answer | **lower** |
-| tool accuracy | **6/6** | did the agent pick the right tool | higher |
-| grounding | **6/6** | did it name only films a tool actually returned | higher |
-| faithfulness | **0.78 ± 0.02** | does the answer follow from the retrieved text (RAGAS) | higher |
+| tool accuracy | **8/8** | did the agent pick the right tool | higher |
+| grounding | **8/8** | did it name only films a tool actually returned | higher |
+| faithfulness | **0.72** | does the answer follow from the retrieved text (RAGAS) | higher |
 
 ### Faithfulness: read this before quoting the number
 
-**Baseline: 0.78 ± 0.02**, `openai/gpt-5.6-luna`, 3 draws per case, 4 cases (2 refusals excluded).
+**Baseline: 0.72**, `openai/gpt-5.6-luna`, 3 draws per case, **6 cases judged of 8**
+(2 refusals excluded). Widest per-case spread in that run: 0.21.
+
+**0.78 is void.** It was measured over 4 judged cases; this is 6. Two cases were added on
+25 Aug because `find_films_by_fact` had shipped with **zero test coverage** and the hybrid
+query shape had none either. A different denominator is a different number — the drop from
+0.78 to 0.72 measures the new cases, not a regression.
 
 **A change under 0.05 on the headline is noise.** Measured, not assumed: the SAME frozen
 answers, re-judged at temperature 0, scored 0.87 / 0.75 / 0.79 on a single draw each.
@@ -108,12 +114,45 @@ python build_graph.py --status
 | `api.py` | `static/index.html` only |
 | `build_graph.py` / `graph_schema.sql` | `core.graph_find`, `tools.find_films_by_fact`, `eval_agent.py` |
 | `repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
+| a job's `name:` in `.github/workflows/ci.yml` | **the branch ruleset on GitHub.** It requires check names as plain strings, so renaming a job leaves the ruleset waiting forever for a check that no longer exists — no red cross, no error, just a PR stuck on "Expected". Rename both in the same sitting |
 | `data/golden_set.json` | `eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
 | the corpus (`derive_corpus.py`, `chunk_plots.py`) | re-embed, then **both** evals |
 
 **The trap in this table:** `api.py` parses `tools.py`'s plain-text output with a regular
 expression. Change the tool's wording and the web UI silently stops showing scores — no error,
 no crash, just an empty panel. Nothing in the type system connects those two files.
+
+---
+
+## Settled experiments — do not repeat these
+
+**A bigger agent model is worse here. Measured 25 Aug 2026.**
+
+| model | tool accuracy | faithfulness |
+|---|---|---|
+| `amazon.nova-micro-v1:0` (current) | **6/6** | **0.78 ± 0.02** |
+| `amazon.nova-lite-v1:0` | crashed | — |
+| `amazon.nova-pro-v1:0` | 5/6 | **0.61** |
+
+- **nova-lite crashes.** `ModelErrorException: Model produced invalid sequence as part of
+  ToolUse`, on a real prompt with three real tools. The first version of
+  `experiments/probe_agent_models.py` cleared it as USABLE because it only asked for one
+  trivial tool call — the probe has since been rewritten to bind the real tools and send
+  the real system prompt.
+- **nova-pro regressed on faithfulness, far outside the noise floor.** Its case-4 answer
+  scored 0.00: *"The Shawshank Redemption is a good fit because it is about a man who is
+  wrongly imprisoned but never gives up."* The retrieved overview says he was imprisoned
+  **for** a double murder and never says he was wrongly convicted or that he persisted.
+  Two claims, neither supported — it restated the question instead of using the evidence.
+- **One of pro's two "failures" was the test's fault.** On case 5 it chose
+  `find_films_by_fact` for *"a documentary about climate change"*, which follows the
+  documented rule that a GENRE routes to the graph. The case predated the third tool.
+  It now accepts either tool.
+- **The lesson is not "small is better".** This agent's hardest job is following precise
+  instructions, and micro is already at ceiling there while being less willing to answer
+  from the question rather than the evidence.
+
+**A more expensive judge does not help.** See the faithfulness section above.
 
 ---
 
