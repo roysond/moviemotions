@@ -183,7 +183,7 @@ START → think ──has tool_calls?──→ act ──┐
 | **One `.env`, gitignored, loaded in exactly one place** | The single `load_dotenv()` line is the seam. Swapping to a secret manager deletes one line |
 | **IAM user with no console access** | Least privilege by *kind*, not just amount. A leaked key isn't a browser session |
 | **Two identities: app invokes, assistant reads** | Neither can do the other's job. Separation of duties |
-| **`deny` rules in `settings.json`** | Enforced by the program, outside the model. **A prompt is a request; code is a guarantee** |
+| **`deny` rules in `.claude/settings.json`** | Enforced by the program, outside the model. **A prompt is a request; code is a guarantee** |
 | **Never echo a secret — verify by property or by effect** | A key's *length* proves it's well-formed. A successful call proves it works. Neither exposes it |
 | **A third-party register** | "Can we ship this?" should be answerable in one sentence, not by re-reading five sets of terms |
 | **Source precedence declared per field, never globally** | An API may be authoritative on runtime while a press kit is authoritative on billing order |

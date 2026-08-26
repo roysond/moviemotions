@@ -30,6 +30,12 @@ os.chdir(ROOT)
 
 failures, warnings = [], []
 
+# Files that failed to parse. Later checks must SKIP these rather than crash on them:
+# one broken file should produce one clear failure, not a traceback that hides the
+# other five checks. Found by the negative test — the gate exited 1 for the wrong
+# reason, which reads exactly like working.
+unparseable = set()
+
 
 def fail(check, detail):
     failures.append((check, detail))
@@ -49,6 +55,7 @@ def check_syntax():
         try:
             ast.parse(open(path, encoding="utf-8").read(), filename=path)
         except SyntaxError as error:
+            unparseable.add(path)
             fail("syntax", f"{path}:{error.lineno} {error.msg}")
 
 
@@ -70,6 +77,8 @@ def check_requirements():
              "psycopg": "psycopg", "PIL": "pillow"}
     stdlib = set(sys.stdlib_module_names)
     for path in py_files():
+        if path in unparseable:
+            continue                      # already reported by the syntax check
         tree = ast.parse(open(path, encoding="utf-8").read(), filename=path)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -135,8 +144,24 @@ SECRET_SHAPES = [
     ("OpenAI-style key", re.compile(r"\bsk-[A-Za-z0-9]{20,}")),
     ("OpenRouter key", re.compile(r"\bsk-or-v1-[A-Za-z0-9]{20,}")),
     ("LangSmith key", re.compile(r"\blsv2_[A-Za-z0-9_]{20,}")),
-    ("postgres URL with a password", re.compile(r"postgres(?:ql)?://[^:\s]+:[^@\s]+@")),
+    ("postgres URL with a password",
+     re.compile(r"postgres(?:ql)?://([^:\s]+):([^@\s]+)@")),
 ]
+
+# Documentation MUST show the shape of a connection string. These are the words people
+# use when they mean "put yours here" — a scanner that cannot tell an example from a
+# credential gets switched off, and a switched-off scanner catches nothing.
+PLACEHOLDERS = {"user", "username", "pass", "password", "passwd", "youruser",
+                "yourpassword", "your-user", "your-password", "postgres", "changeme",
+                "xxx", "***", "user_name", "my_user", "my_password"}
+
+
+def is_placeholder(match):
+    parts = [g for g in (match.groups() or ()) if g]
+    if not parts:
+        return False
+    return any(p.strip("<>{}[]").lower() in PLACEHOLDERS or p.startswith(("<", "{", "$"))
+               for p in parts)
 SCAN_GLOBS = ["*.py", "*.md", "*.sql", "*.txt", "*.yml", "*.html",
               "docs/*.md", "docs/*.html", "experiments/*.py", ".env.example"]
 
@@ -150,6 +175,8 @@ def check_no_secrets():
                 continue
             for label, shape in SECRET_SHAPES:
                 for match in shape.finditer(text):
+                    if is_placeholder(match):
+                        continue
                     line = text[:match.start()].count("\n") + 1
                     fail("secrets", f"{path}:{line} looks like a {label} — value not shown")
 

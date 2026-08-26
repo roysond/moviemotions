@@ -47,6 +47,7 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films   
 | `build_graph.py` | derives the knowledge graph from `movies.raw_payload`. Idempotent; `--status` and `--remove` |
 | `experiments/graph_vs_vector.py` | the same factual question sent to both machines, side by side |
 | `eval_variants.py` · `eval_agent.py` | the two harnesses. See `docs/verification.md` |
+| `repo_check.py` | the structural checks CI runs. Standard library only, no credentials, no database |
 
 **One caution.** `api.py` parses `tools.py`'s plain-text output with a regular expression, so
 changing the tool's wording can silently break the web display with no error anywhere.
@@ -238,6 +239,33 @@ asserts more on questions with no answer. Run `python eval_variants.py` to see a
 | `db_audit.py` | read-only schema, row counts, integrity checks |
 | `genre_corpus.py` | the genre-as-corpus experiment — add, measure, remove |
 | `mood_audit.py` | which films dominate mood queries, and are they ever right? |
+
+---
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request. Two jobs, two different questions:
+
+```bash
+python repo_check.py        # the same structural checks CI runs — run it before you push
+```
+
+| job | what it asks |
+|---|---|
+| **Structure** | Does every module parse? Is every third-party import pinned? Does `.env.example` match what the code reads? Does any doc point at a file that doesn't exist? Has anything secret-shaped been committed? Does `.gitignore` protect `.env` without swallowing a schema file? |
+| **Dependencies** | Does `requirements.txt` actually install on a clean machine, and does the third-party stack import? |
+
+**CI holds no credentials and never will.** A workflow with your AWS keys is a workflow
+that can leak them, and a pull request from a fork could read them. So CI checks
+*structure*; the evals check *behaviour*, on your machine where the keys already live.
+
+Every check exists because it caught something real — the `.gitignore` rule that silently
+excluded `graph_schema.sql`, three environment variables the code required and the
+template omitted, a doc pointing at a file that no longer existed. Found by hand once,
+then written down so they cannot recur.
+
+`repo_check.py` uses the standard library only. A gate that needs a dependency install
+can be broken *by* a dependency.
 
 ---
 
