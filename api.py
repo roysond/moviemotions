@@ -94,7 +94,10 @@ def trace_of(messages):
 def config_for(thread_id):
     return {
         "configurable": {"thread_id": thread_id},
-        "recursion_limit": MAX_PASSES * 3,
+        # x4, not x3: the critic adds a node to every lap, and the limit counts NODE
+        # EXECUTIONS rather than laps. Left at x3 a long conversation would hit the
+        # backstop and look like a runaway loop when nothing is wrong.
+        "recursion_limit": MAX_PASSES * 4,
         "run_name": "moviemotions-web",
         "metadata": {"agent_model": AGENT_MODEL, "surface": "web"},
     }

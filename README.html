@@ -361,8 +361,12 @@ live in prose, and the model obeys them.</p>
   <li><b>Short text dominates the vector stage.</b> For one creature-peril query, nine of the top
       ten candidates were 120-character mood blurbs — including Finding Nemo. Concentrated text wins
       on cosine similarity, so the plot corpus can struggle to reach the reranker.</li>
-  <li><b>Rerank scores are not stable run to run.</b> OpenRouter is a gateway; the same model id can
-      land on a different backend. <b>Trust the gap between scores, not the absolute value.</b></li>
+  <li><b>Rerank scores are stable.</b> <b>A previous claim to the contrary is retracted
+      (26 Aug 2026).</b> The same query run twice returns identical scores to four decimal
+      places, and <code>eval_variants.py</code> has reproduced exactly on separate days.
+      <code>cohere/rerank-v3.5</code> has one provider on OpenRouter, so there is no backend to
+      route between. The claim came from one genre experiment that scored 96.6% once and 86.2%
+      twice; the corpus was being changed at the time.</li>
   <li><b>The graph is thin on people.</b> Only 3 directors and 7 actors appear in more than one
       film. A graph's value scales with shared nodes, and 20 films is a small world.</li>
   <li><b>Answer quality is at the small-model floor.</b> The agent model is strong at structured

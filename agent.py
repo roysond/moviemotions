@@ -35,6 +35,7 @@ HOW IT STOPS — two mechanisms, and only one of them is the safety net
 """
 
 import os
+import re
 import textwrap
 import uuid
 
@@ -139,6 +140,89 @@ def think(state: MessagesState) -> dict:
     return {"messages": [reply]}
 
 
+CRITIC_PROMPT = """You are a fact-checker. You are NOT writing an answer.
+
+Below is EVIDENCE gathered from a film database, then a DRAFT reply written by someone
+else. Your only job is to say which lines of the draft are not supported by the evidence.
+
+A line is UNSUPPORTED if it states anything the evidence does not say. Judge only what
+is written, not what you happen to know about these films from anywhere else. Treat
+these as unsupported:
+  - a claim about content the evidence never mentions (violence, gore, romance, humour)
+  - a description of a film that does not appear in the evidence for THAT film
+  - an assertion about how a film feels, unless the evidence uses such words itself
+
+A line is SUPPORTED if the evidence says it, or says something that plainly means it.
+Do not mark a line unsupported merely because it is short, vague, or a greeting.
+
+EVIDENCE
+{evidence}
+
+DRAFT
+{draft}
+
+Reply with ONLY the numbers of the unsupported lines, separated by commas.
+If every line is supported, reply with exactly: NONE
+Reply with nothing else — no explanation, no punctuation beyond the commas."""
+
+
+def critic(state: MessagesState) -> Command:
+    """NODE — strike any line the retrieved text does not support.
+
+    THE SPLIT THAT MAKES THIS SAFE
+        The model JUDGES and the code EDITS. It is asked for line numbers, never for a
+        rewrite. A critic allowed to rewrite can remove one invented claim and introduce
+        another in the same breath, and nothing downstream would be able to tell.
+
+    WHY LINE BY LINE
+        The system prompt already puts one film per line, so a line is the natural unit.
+        It also isolates the opening flourish — "here are films that are more intense and
+        have gore" — as its own line, strikeable without touching the recommendations.
+
+    THE GUARD
+        If every line is struck, the draft is kept unchanged. An empty answer is a worse
+        failure than an unsupported one, and a critic that deletes everything is broken
+        rather than strict.
+    """
+    message = state["messages"][-1]
+    draft = split_content(message)[0]
+    lines = [ln for ln in draft.splitlines() if ln.strip()]
+    if not lines:
+        return Command(goto="review")
+
+    # Everything the tools actually returned in this conversation. This is the only
+    # thing the draft is allowed to be true about.
+    evidence = "\n\n".join(
+        str(m.content) for m in state["messages"]
+        if m.__class__.__name__ == "ToolMessage"
+    )
+    if not evidence.strip():
+        return Command(goto="review")     # nothing was retrieved; nothing to check against
+
+    numbered = "\n".join(f"{i}. {ln}" for i, ln in enumerate(lines, start=1))
+    try:
+        verdict = split_content(llm.invoke([HumanMessage(
+            CRITIC_PROMPT.format(evidence=evidence, draft=numbered))]))[0]
+    except Exception as error:
+        # A critic that cannot run must not block an answer. Degrade, do not fail.
+        print(f"  [critic unavailable: {type(error).__name__} — draft passed through]")
+        return Command(goto="review")
+
+    struck = {int(n) for n in re.findall(r"\d+", verdict) if 1 <= int(n) <= len(lines)}
+    kept = [ln for i, ln in enumerate(lines, start=1) if i not in struck]
+
+    if not kept:                          # THE GUARD
+        print("  [critic struck every line — keeping the draft]")
+        return Command(goto="review")
+
+    if struck:
+        print(f"  [critic struck {len(struck)} of {len(lines)} lines]")
+
+    return Command(goto="review",
+                   update={"messages": [AIMessage(content="\n".join(kept),
+                                                  id=message.id)]})
+
+
 def should_continue(state: MessagesState) -> str:
     """THE CONDITIONAL EDGE — the one branch that makes this an agent.
 
@@ -146,7 +230,7 @@ def should_continue(state: MessagesState) -> str:
     run it. A reply without tool_calls is the model ANSWERING — and the answer now
     goes past a human before it goes out.
     """
-    return "act" if getattr(state["messages"][-1], "tool_calls", None) else "review"
+    return "act" if getattr(state["messages"][-1], "tool_calls", None) else "critic"
 
 
 def review(state: MessagesState) -> Command:
@@ -194,9 +278,10 @@ def review(state: MessagesState) -> Command:
 builder = StateGraph(MessagesState)
 builder.add_node("think", think)
 builder.add_node("act", ToolNode(TOOLS))     # runs whatever the model asked for
+builder.add_node("critic", critic, destinations=("review",))
 builder.add_node("review", review, destinations=("think", END))
 builder.add_edge(START, "think")
-builder.add_conditional_edges("think", should_continue, {"act": "act", "review": "review"})
+builder.add_conditional_edges("think", should_continue, {"act": "act", "critic": "critic"})
 builder.add_edge("act", "think")             # <-- the backward edge IS the loop
 # A checkpointer is what makes a pause resumable. InMemorySaver keeps it in this
 # process; swapping in a Postgres saver is the only change needed to survive a restart.
@@ -268,7 +353,10 @@ def converse(question: str, show_trace: bool = True, decide=ask_human) -> list:
         # interrupt means "reload THIS thread", so it must be the same on both calls.
         "configurable": {"thread_id": str(uuid.uuid4())},
         # the review node costs a step per pass, so the backstop allows for it
-        "recursion_limit": MAX_PASSES * 3,
+        # x4, not x3: the critic adds a node to every lap, and the limit counts NODE
+        # EXECUTIONS rather than laps. Left at x3 a long conversation would hit the
+        # backstop and look like a runaway loop when nothing is wrong.
+        "recursion_limit": MAX_PASSES * 4,
         # names the trace in LangSmith; metadata makes runs filterable by model
         "run_name": "moviemotions-agent",
         "metadata": {"agent_model": AGENT_MODEL},

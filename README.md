@@ -310,8 +310,12 @@ in prose, and the model obeys them.
 - **Mood queries rank the wrong films.** *"warm, comforting, rainy evening"* returns prison dramas.
   The corpus describes what *happens*, never how a film *feels* — a corpus problem, not a query or
   threshold problem.
-- **Rerank scores are not stable run to run.** OpenRouter is a gateway; the same model id can land
-  on a different backend. **Trust the gap between scores, not the absolute value.**
+- ~~**Rerank scores are not stable run to run.**~~ **Retracted 26 Aug 2026 — this was wrong.**
+  Measured: the same query run twice returns identical scores to four decimal places, and
+  `eval_variants.py` has reproduced exactly on separate days. `cohere/rerank-v3.5` also has
+  exactly one provider on OpenRouter, so there is no backend to route between. The claim came
+  from one genre experiment that scored 96.6% once and 86.2% twice; the corpus was being
+  changed at the time, which explains it far better than the model did.
 - **The graph is thin on people.** Only 3 directors and 7 actors appear in more than one film, so
   "another film by this director" works for three directors. A graph's value scales with shared
   nodes, and 20 films is a small world.

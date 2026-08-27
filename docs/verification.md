@@ -69,9 +69,13 @@ that trade is why two metrics are reported, never one.
 **Two metrics, never one.** Anything that makes the system more eager raises recall *and*
 raises false confidence. A change that moves only one of them has not been understood yet.
 
-**Rerank scores are not stable run to run.** OpenRouter is a gateway and the same model id can
-land on a different backend. Trust the *gap* between scores, not the absolute value, and treat
-any single unreproduced result as an anecdote.
+**Rerank scores ARE stable. The previous claim is retracted, 26 Aug 2026.** The same query run
+twice returns identical scores to four decimal places, and `eval_variants.py` has reproduced
+exactly on separate days. `cohere/rerank-v3.5` has one provider on OpenRouter, so the "gateway
+routes to a different backend" explanation cannot apply to it. The claim came from a single
+genre experiment that scored 96.6% once and 86.2% twice; the cause was never established and
+was attributed to the reranker on no evidence — the corpus was being modified at the time.
+**Still treat a single unreproduced result as an anecdote. That part stands.**
 
 ---
 
@@ -151,6 +155,30 @@ no crash, just an empty panel. Nothing in the type system connects those two fil
 - **The lesson is not "small is better".** This agent's hardest job is following precise
   instructions, and micro is already at ceiling there while being less willing to answer
   from the question rather than the evidence.
+
+**The critic node is IN PLACE but UNPROVEN. 26 Aug 2026.**
+A verification step between `think` and `review` that strikes lines the retrieved text does not
+support. It runs, it strikes lines on ~half the cases, and all guards hold — tool 8/8,
+grounding 8/8, expected films 8/8. **But faithfulness came out at 0.75, inside the noise floor.**
+Prediction was >0.82; the prediction failed.
+
+Two reasons, both diagnosed:
+1. **Wrong unit.** The dominant failure is an unsupported clause inside an otherwise-correct
+   sentence — "Andy Dufresne, an upstanding banker who is *wrongly imprisoned*". Line-level
+   deletion can keep the whole thing or destroy a correct recommendation. It cannot do surgery.
+2. **It treats refusals as unsupported.** "I don't have any documentaries" cannot be supported
+   by a list of what IS present — the same structural problem that makes refusals excluded from
+   faithfulness scoring. The guard caught it; the prompt still needs fixing.
+
+**Agreed redesign, not yet built:** the critic sends the draft back for ONE rewrite instead of
+deleting, and judges by CLAIM TYPE rather than by strictness — the agent may interpret what it
+was given ("tense", "a good fit") but may not add facts it was not given ("has gore", "wrongly
+imprisoned", "a classic"). That rule also fixes the refusal bug for free, since a refusal
+asserts no fact about any film.
+
+**Consequence for the metric:** faithfulness 1.00 is NOT the target. RAGAS penalises
+interpretation by design, so a perfect score would mean the agent had stopped interpreting.
+Treat it as a direction, not a goal.
 
 **A more expensive judge does not help.** See the faithfulness section above.
 
