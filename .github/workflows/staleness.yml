@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# STALENESS ALARM — the repository watching its own data expire.
+#
+# Code rots slowly. Streaming prices rot in weeks: Apple TV moved $12.99 -> $14.99
+# on the day providers.py was written, and Peacock had moved ten days before that.
+# Nothing in a pull-request gate can catch that, because nothing in the repository
+# CHANGES when the outside world does. Only the calendar knows.
+#
+# So this runs on a schedule instead of on a change, reads the date stamped in
+# providers.py, and opens an issue when it is too old. It is the smallest possible
+# version of drift detection, and it needs no model and no API key.
+#
+# ON THE TOKEN: GITHUB_TOKEN is not a secret you store. GitHub mints one per run,
+# scoped to this repository only, and it expires when the job ends. The rule that
+# CI holds no credentials is about YOUR keys — AWS, OpenRouter, the database —
+# and none of those appear here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Price staleness
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'      # 09:00 UTC every Monday
+  workflow_dispatch:          # and a Run button, for testing it without waiting a week
+
+permissions:
+  contents: read
+  issues: write               # least privilege: it may open an issue, nothing else
+
+jobs:
+  check:
+    name: Are the prices still fresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Read the date by parsing the file rather than importing it: no pip install,
+      # no dependencies, nothing that can break this check except the date itself.
+      - name: Measure how old the prices are
+        id: age
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import datetime, re
+          source = open("providers.py", encoding="utf-8").read()
+          checked = re.search(r"PRICES_CHECKED_ON\s*=\s*date\((\d+),\s*(\d+),\s*(\d+)\)", source)
+          limit = re.search(r"STALE_AFTER_DAYS\s*=\s*(\d+)", source)
+          on = datetime.date(*map(int, checked.groups()))
+          days = (datetime.date.today() - on).days
+          print(f"days={days}")
+          print(f"checked_on={on.isoformat()}")
+          print(f"limit={limit.group(1)}")
+          print(f"stale={'true' if days > int(limit.group(1)) else 'false'}")
+          PY
+
+      - name: Say what it found
+        run: |
+          echo "prices checked ${{ steps.age.outputs.checked_on }}"
+          echo "${{ steps.age.outputs.days }} days old, limit ${{ steps.age.outputs.limit }}"
+
+      # One open issue at a time. A weekly job that opens a fresh issue every week
+      # trains you to ignore it, which is the same failure as a flaky red build.
+      - name: Open an issue if they have gone stale
+        if: steps.age.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: "Streaming prices are stale"
+        run: |
+          if gh issue list --state open --search "$TITLE in:title" --json title \
+             | grep -q "$TITLE"; then
+            echo "an open issue already says this; not opening another"
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "$(cat <<EOF
+          \`providers.py\` says prices were last checked on
+          **${{ steps.age.outputs.checked_on }}** — that is
+          **${{ steps.age.outputs.days }} days** ago, past the
+          ${{ steps.age.outputs.limit }}-day limit the file sets for itself.
+
+          Availability and pricing are the most perishable data in this catalogue.
+          Every price shown in the UI is currently being presented as of a date that
+          is now out of date.
+
+          To clear this:
+          1. Re-check the prices in \`providers.py\` against their recorded sources.
+          2. Update \`PRICES_CHECKED_ON\`.
+          3. Mark anything you cannot confirm from an official page as \`verified=False\`
+             rather than guessing.
+          EOF
+          )"

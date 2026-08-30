@@ -69,7 +69,7 @@ def check_requirements():
     if not os.path.exists("requirements.txt"):
         return fail("requirements", "requirements.txt is missing")
     pinned = {
-        re.split(r"[=<>!\[]", line, 1)[0].strip().lower().replace("_", "-")
+        re.split(r"[=<>!\[]", line, maxsplit=1)[0].strip().lower().replace("_", "-")
         for line in open("requirements.txt", encoding="utf-8")
         if line.strip() and not line.startswith("#")
     }
