@@ -191,12 +191,22 @@ POSTER_SIZE = "w342"
 LOGO_SIZE = "w45"
 
 
-def films_mentioned(answer, titles=None):
-    """Which catalogue films does this answer actually name, in the order named?
+# Words that turn a mention into a REJECTION. "…but are not Jurassic Park" names
+# the film in order to rule it out, and a panel that cannot tell the difference
+# proudly recommends the one film the agent just excluded.
+NEGATIONS = ("not ", "n't ", "other than", "besides", "except", "excluding",
+             "rather than", "instead of", "unlike", "apart from", "aside from")
+NEGATION_WINDOW = 40      # characters before the title to inspect
 
-    Only exact catalogue titles count. The panel can never show a film the agent
-    did not name, which is the same grounding rule the agent itself works under.
+
+def films_mentioned(answer, titles=None, exclude=()):
+    """Which films does this answer actually RECOMMEND, in the order named?
+
+    Only exact catalogue titles count, and only mentions that are not rejections.
+    The panel can never show a film the agent did not name — the same grounding
+    rule the agent itself works under — nor one it named in order to dismiss.
     """
+    dismissed = {name.strip().lower() for name in exclude if name}
     # `titles` is injected by the tests so this can be checked without a database.
     # A function that reaches out and fetches its own input cannot be tested cheaply.
     if titles is None:
@@ -206,9 +216,22 @@ def films_mentioned(answer, titles=None):
     lowered = answer.lower()
     found, claimed = [], []
     for title in titles:                       # longest first
+        if title.lower() in dismissed:         # the agent asked us to leave it out
+            continue
         at = lowered.find(title.lower())
         if at == -1:
             continue
+        # A negation governs its own SENTENCE and nothing after it. Two false
+        # positives had to be fixed before this behaved:
+        #   a plain 40-character window reached across the line break from
+        #     `...but are not "Jurassic Park":` into `1. **Predator (1987)**`
+        #   stopping at the line break alone still let "Predator is not for
+        #     everyone. Alien is safer." swallow Alien
+        # So: look back only as far as the previous sentence end or line break.
+        start = max((lowered.rfind(mark, 0, at) for mark in "\n.!?:"), default=-1) + 1
+        before = lowered[max(start, at - NEGATION_WINDOW):at]
+        if any(word in before for word in NEGATIONS):
+            continue                           # named only to be ruled out
         # A longer title already covering this span wins; "Terminator 2" must not
         # match again inside "Terminator 2: Judgment Day".
         if any(start <= at < end for start, end in claimed):
@@ -218,27 +241,58 @@ def films_mentioned(answer, titles=None):
     return [title for _, title in sorted(found)]
 
 
-def reasons_for(answer, title):
-    """The agent's OWN sentences about this film — never our paraphrase."""
-    lines = []
-    for line in answer.splitlines():
-        if title.lower() in line.lower():
-            text = line.strip().lstrip("-*0123456789. ").strip()
-            text = re.sub(r"\*\*", "", text)
-            if text:
-                lines.append(text)
-    return lines[:3]
+def reasons_for(answer, title, others=()):
+    """The agent's OWN sentences about this film — never our paraphrase.
+
+    Answers are written as blocks separated by blank lines:
+
+        1. **Predator (1987)**
+           - A team of elite commandos ... hunted by an extraterrestrial warrior.
+
+    The description sits on the line AFTER the title, so matching line-by-line
+    found the heading and threw the actual reason away. Match the block instead,
+    then drop the heading, because the title is already displayed beside it.
+    """
+    rest = [name for name in others if name.lower() != title.lower()]
+
+    for block in re.split(r"\n\s*\n", answer):
+        if title.lower() not in block.lower():
+            continue
+        lines, started = [], False
+        for line in block.splitlines():
+            text = re.sub(r"\*\*", "", line).strip().lstrip("-*0123456789. ").strip()
+            if not text:
+                continue
+            if not started:
+                if title.lower() not in text.lower():
+                    continue                     # still in the preamble
+                started = True
+            # A compact answer puts every film on its own line with no blank line
+            # between them, so "the block" is the whole list. Stop as soon as a
+            # line BEGINS with another film, or Alien's sentence is served up as
+            # one of Predator's reasons.
+            elif any(text.lower().startswith(name.lower()) for name in rest):
+                break
+            bare = re.sub(r"\s*\(\d{4}\)\s*$", "", text)
+            if bare.lower() == title.lower():        # the heading; the panel shows it
+                continue
+            lines.append(text)
+        if lines:
+            return lines[:3]
+    return []
 
 
 class Panel(BaseModel):
     answer: str
+    exclude: list[str] = []      # titles the agent explicitly asked to leave out
 
 
 @app.post("/api/panel")
 def panel(request: Panel):
     """Everything the results panel draws: poster, the agent's reasons, banded offers."""
     rows = []
-    for title in films_mentioned(request.answer):
+    titles = films_mentioned(request.answer, exclude=request.exclude)
+    for title in titles:
         found = availability(title)
         if not found["found"]:
             continue
@@ -258,7 +312,7 @@ def panel(request: Panel):
             "runtime_minutes": found["runtime_minutes"],
             "poster_url": (f"{TMDB_IMAGE}/{POSTER_SIZE}{found['poster_path']}"
                            if found["poster_path"] else None),
-            "reasons": reasons_for(request.answer, found["title"]),
+            "reasons": reasons_for(request.answer, found["title"], titles),
             "has_listing": found["has_listing"],
             "region": found["region"],
             "checked_on": found["checked_on"],
