@@ -254,11 +254,12 @@ def reasons_for(answer, title, others=()):
     then drop the heading, because the title is already displayed beside it.
     """
     rest = [name for name in others if name.lower() != title.lower()]
+    marker = re.compile(r"^\s*(?:[-*\u2022]|\d+[.)])\s")
 
     for block in re.split(r"\n\s*\n", answer):
         if title.lower() not in block.lower():
             continue
-        lines, started = [], False
+        lines, started, indent = [], False, 0
         for line in block.splitlines():
             text = re.sub(r"\*\*", "", line).strip().lstrip("-*0123456789. ").strip()
             if not text:
@@ -266,13 +267,25 @@ def reasons_for(answer, title, others=()):
             if not started:
                 if title.lower() not in text.lower():
                     continue                     # still in the preamble
-                started = True
-            # A compact answer puts every film on its own line with no blank line
-            # between them, so "the block" is the whole list. Stop as soon as a
-            # line BEGINS with another film, or Alien's sentence is served up as
-            # one of Predator's reasons.
-            elif any(text.lower().startswith(name.lower()) for name in rest):
-                break
+                started, indent = True, len(line) - len(line.lstrip())
+            else:
+                # WHERE DOES THIS FILM'S ENTRY END?
+                # A compact answer has no blank line between films, so "the block"
+                # is the whole list and Alien's sentence would be served up as one
+                # of Predator's reasons.
+                #
+                # Two independent stops, because either can be absent:
+                #   1. the line names another film we already matched
+                #   2. the line starts a NEW list item at the same indentation as
+                #      the title. A description is indented deeper than its own
+                #      heading; the next film's entry is not. This one needs no
+                #      knowledge of the catalogue, so the function is correct even
+                #      when a caller passes no `others` — which is exactly how the
+                #      test called it, and how it broke.
+                if any(text.lower().startswith(name.lower()) for name in rest):
+                    break
+                if marker.match(line) and (len(line) - len(line.lstrip())) <= indent:
+                    break
             bare = re.sub(r"\s*\(\d{4}\)\s*$", "", text)
             if bare.lower() == title.lower():        # the heading; the panel shows it
                 continue
