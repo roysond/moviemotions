@@ -100,6 +100,7 @@ python -m evals.eval_agent           # the agent: tool accuracy, grounding, RAGA
 python -m pipeline.build_graph --status  # the graph: node and edge counts by type
 python -m scripts.build_docs --check # the docs: is the HTML rebuilt from its markdown
 cd frontend &amp;&amp; npm run build         # the front end: tsc --noEmit, then the bundle</code></pre>
+<p><strong>These run against your working tree. CI runs against the commit.</strong> They are not the same thing: everything in <code>.gitignore</code> — the private planning docs, the derived data, the build output — is on your disk and in no checkout. A gate that asks <code>does this file exist?</code> will therefore answer differently in the two places unless it is written not to, which is why <code>repo_check</code> reads <code>.gitignore</code> and treats anything listed there as absent everywhere. If a check ever passes here and fails on the pull request, suspect that gap first.</p>
 <p><strong>Reproduce CI's conditions before pushing:</strong></p>
 <pre><code class="lang-bash">env -i HOME="$HOME" PATH="$PATH" .venv/bin/python -m pytest tests -q</code></pre>
 <p><code>env -i</code> wipes every environment variable, which is the blank slate a CI runner gets. A normal run inherits everything you exported from <code>.env</code> and will therefore lie to you: <code>tests/conftest.py</code> once said <code>AWS_DEFAULT_REGION</code> where the code says <code>AWS_REGION</code>, the tests passed on the laptop, and CI failed on the first clean machine that ran them.</p>

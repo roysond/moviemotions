@@ -139,6 +139,13 @@ python -m scripts.build_docs --check # the docs: is the HTML rebuilt from its ma
 cd frontend && npm run build         # the front end: tsc --noEmit, then the bundle
 ```
 
+**These run against your working tree. CI runs against the commit.** They are not the same
+thing: everything in `.gitignore` — the private planning docs, the derived data, the build
+output — is on your disk and in no checkout. A gate that asks `does this file exist?` will
+therefore answer differently in the two places unless it is written not to, which is why
+`repo_check` reads `.gitignore` and treats anything listed there as absent everywhere. If a
+check ever passes here and fails on the pull request, suspect that gap first.
+
 **Reproduce CI's conditions before pushing:**
 
 ```bash

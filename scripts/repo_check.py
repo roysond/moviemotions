@@ -131,11 +131,30 @@ def check_env_example():
 REFERENCE = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|md|sql|html|json|txt|yml|yaml))`")
 
 
+def never_committed():
+    """Paths .gitignore keeps out of the repository, as literal names.
+
+    A reference to one of these is not a dead link — it points at something that
+    exists on the author's machine and is deliberately private. CI checks out only
+    what was committed, so this must be read FROM .gitignore rather than hard-coded:
+    a hand-kept second list would drift, and the drift would only ever show up as a
+    red build. Glob rules are skipped; only exact paths can be matched safely.
+    """
+    if not os.path.exists(".gitignore"):
+        return set()
+    return {line.strip().rstrip("/")
+            for line in open(".gitignore", encoding="utf-8")
+            if line.strip()
+            and not line.startswith(("#", "!"))
+            and not any(ch in line for ch in "*?[")}
+
+
 def check_doc_references():
     # A dated log legitimately names files that have since moved or gone: on 30 Aug the
     # repository was reorganised, and rewriting old entries to match would falsify the
     # record. Documents that describe the CURRENT system are still checked strictly.
     HISTORICAL = {"docs/session-notes.md"}
+    private = never_committed()
     docs = [d for d in ["README.md"] + sorted(glob.glob("docs/*.md"))
             if d not in HISTORICAL]
     for doc in docs:
@@ -145,6 +164,12 @@ def check_doc_references():
         if os.path.basename(doc) in {"session-notes.md", "roadmap.md", "groundwork.md"}:
             continue
         for ref in sorted(set(REFERENCE.findall(open(doc, encoding="utf-8").read()))):
+            # Checked BEFORE existence, deliberately. If it were checked after, this
+            # gate would pass on the author's machine — where the file is present —
+            # and fail in CI, where it never is. Same answer in both places or the
+            # gate is worse than useless.
+            if any(p in private for p in (ref, f"docs/{ref}")):
+                continue
             if any(os.path.exists(p) for p in (ref, f"docs/{ref}", f"experiments/{ref}")):
                 continue
             fail("docs", f"{doc} references '{ref}', which does not exist")
