@@ -229,6 +229,39 @@ no vendor knows your business rules.*
 
 ---
 
+## Pass 3 — availability, a semantic layer, and a screen
+
+| Decision | Why |
+|---|---|
+| **The offer type lives in the EDGE TYPE, not in `properties`** | Amazon both rents and sells Alien: two different facts about the same pair. The UNIQUE constraint keys on (from, to, type, source), so as a property the database would silently keep one and discard the other. **A difference that matters must sit where uniqueness is enforced** |
+| **The country lives in the edge's `source` (`tmdb:US`)** | "TMDB's US listing" and "TMDB's UK listing" are different claims. Adding a second country later cannot overwrite the first |
+| **The database keeps TMDB's mess; `providers.py` tidies at display time** | TMDB reports four separate Paramount+ entries for one thing a person calls Paramount+, and "Apple TV" beside "Apple TV Store" for a subscription and a shop. Storage stays faithful, presentation gets to be sensible. Keep the raw thing |
+| **Every price carries a date and a source, and unverified ones say so** | Apple TV moved $12.99 → $14.99 on the day the file was written. 12 of 34 could not be confirmed from an official page and are marked, never guessed |
+| **A semantic layer is born from a screen, not from an architecture diagram** | It was an abstract roadmap item for weeks. It became necessary the moment a panel had to show "Paramount+" four times |
+| **Bands, never one sorted list** | $3.99 once and $8.99 a month are not the same kind of cost. A numeric sort puts the rental first and misleads. Free → Subscription → Rent → Buy → Needs a TV provider, cheapest within each |
+| **"price unknown" is printed, never left blank** | An empty cell in a price column reads as *free* |
+| **Rent and buy are shown as "from $x"** | TMDB publishes no per-film price. The mockup said "$3.99" flat, which invented a precision we do not have |
+| **The panel fills from the DRAFT, not after approval** | The human-in-the-loop pause is for reviewing the WORDING. Hiding the evidence until after approval gets it backwards |
+| **The panel may only show films the agent named, and not ones it named to reject** | Same grounding rule the agent works under. It once showed Jurassic Park as pick #1 of an answer that said "…but are not Jurassic Park" |
+| **`REGION` is defined once, in `providers.py`** | A constant written down twice is a constant that will eventually disagree with itself |
+| **A function that fetches its own input cannot be tested cheaply** | `films_mentioned` took a database call; it now takes a list. Same behaviour, injectable |
+| **Fixed pixels for the poster and its column; the offer list absorbs the resize** | A poster that scales with the window makes the row feel unstable, and the title and poster have a *correct* size. Only the offer list genuinely reads fine narrower |
+| **No structural breakpoints in the UI** | A narrow window gets a smaller version of the same layout, never a different one |
+
+### Testing and CI
+
+| Decision | Why |
+|---|---|
+| **Gate on deterministic things; report non-deterministic things** | Faithfulness swung 0.78 → 0.72 across two runs with no code change. Gating on a metric that cannot resolve your change teaches the team to ignore red builds |
+| **The test environment is DERIVED from the code, not typed out** | The hand-written list said `AWS_DEFAULT_REGION` where the code says `AWS_REGION`. It passed on the laptop, because a developer shell has already exported the real values, and failed on the first clean machine |
+| **A green build is not a working system** | Four CI jobs passed on an application where every single request returned 500 |
+| **Tests guard the code you are NOT currently looking at** | A test written the previous day caught a bug in that day's fix — the new `reasons_for` returned another film's sentence as this film's reason |
+| **Verify by running the real function the way the caller calls it** | A fix was "verified" in a scratch copy called with three arguments; the test calls it with two, and the fix depended entirely on the third |
+| **A count says something happened; only the content says what** | "critic struck 2 of 4 lines" told us nothing for three runs. Printing the struck TEXT solved it in one |
+| **Drift alarms run on a SCHEDULE, not on a change** | Nothing in the repository changes when Apple raises a price. Only the calendar knows |
+
+---
+
 ## Four things worth remembering above all
 
 1. **RAG is a noun, agentic is a verb.** A pipeline versus a loop. Retrieval is one tool the loop can use.

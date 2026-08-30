@@ -35,7 +35,8 @@ from typing import Optional
 from langchain_core.tools import tool
 
 import providers
-from core import availability, get_film, graph_find, search
+from core import (availability, excluded_by_filters, get_film, graph_find,
+                  search)
 
 MAX_RESULTS = 5
 
@@ -84,6 +85,14 @@ def search_films(
     max_runtime / min_runtime: length in MINUTES. Translate the user's phrasing —
         "under two hours" -> 120, "I've only got 90 minutes" -> 90, "nothing short"
         -> min_runtime=100. Leave out entirely when the user says nothing about length.
+
+        NEVER CARRY A LENGTH OR YEAR FORWARD FROM AN EARLIER MESSAGE. A runtime limit
+        describes the REQUEST that stated it, not the person. A mood can persist across
+        a conversation; "under two hours" cannot. Asked "something fictional with magic"
+        after an earlier question that mentioned two hours, this tool was sent
+        max_runtime=120 — and the one film in the catalogue actually about magic runs
+        152 minutes, so it was removed before ranking and never had a chance. If the
+        CURRENT message says nothing about length, send no length.
     after_year / before_year: four-digit years, inclusive. "something modern" or
         "from the 90s" -> after_year=1990, before_year=1999. Leave out if not asked.
     exclude_title: a film to keep OUT of the results. Set it whenever the user says
@@ -162,6 +171,21 @@ def search_films(
     lines = []
     if asked:
         lines.append("filters enforced: " + ", ".join(f"{k}={v}" for k, v in asked.items()))
+
+    # A hard filter removes films BEFORE ranking, so a spurious one does not make the
+    # results worse in a visible way — it deletes the right answer silently. Name the
+    # casualties so the loss is legible to you and to the model.
+    lost = excluded_by_filters(max_runtime=max_runtime, min_runtime=min_runtime,
+                               after_year=after_year, before_year=before_year)
+    if lost:
+        named = ", ".join(
+            f"{film['title']} ({film['runtime_minutes']} min)" for film in lost[:6])
+        lines.append(
+            f"those limits removed {len(lost)} film(s) from the pool before ranking: "
+            f"{named}{' …' if len(lost) > 6 else ''}. "
+            f"That is correct and expected IF the user asked for the limit — in that case "
+            f"say nothing about it and do not apologise. Only if the limit was never asked "
+            f"for in the current message is it wrong, and then it should be dropped.")
     for rank, film in enumerate(films, start=1):
         year = (film["release_date"] or "----")[:4]
         runtime = f"{film['runtime_minutes']} min" if film["runtime_minutes"] else "? min"

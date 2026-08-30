@@ -129,14 +129,51 @@ was attributed to the reranker on no evidence — the corpus was being modified 
 
 ```bash
 python repo_check.py         # structure: syntax, pins, env parity, dead refs, secrets
+python -m pytest tests -q    # the maths: damped sum, price banding, schema drift, matching
+python providers.py          # the price table, and whether the graph holds a provider it cannot price
 python eval_variants.py      # retrieval: achievable@3 and quiet@3 over data/golden_set.json
 python eval_agent.py         # the agent: tool accuracy, grounding, RAGAS faithfulness
 python build_graph.py --status   # the graph: node and edge counts by type
+cd frontend && npm run build # the front end: tsc --noEmit, then the bundle
 ```
+
+**Reproduce CI's conditions before pushing:**
+
+```bash
+env -i HOME="$HOME" PATH="$PATH" .venv/bin/python -m pytest tests -q
+```
+
+`env -i` wipes every environment variable, which is the blank slate a CI runner gets.
+A normal run inherits everything you exported from `.env` and will therefore lie to you:
+`tests/conftest.py` once said `AWS_DEFAULT_REGION` where the code says `AWS_REGION`, the tests
+passed on the laptop, and CI failed on the first clean machine that ran them.
 
 Requires `export $(grep -v '^#' .env | grep -v '^$' | xargs)` first, or the scripts silently
 connect to the wrong database. Confirm with `psql "$DATABASE_URL" -c "SELECT current_database();"`
 — it must say `moviemotions`.
+
+---
+
+### What CI checks, restated 30 Aug 2026
+
+The old line — *CI checks structure, the evals check behaviour* — stopped being true the
+day `tests/` arrived. The honest version:
+
+> **CI checks everything that gives the same answer every time.** Syntax, pinned
+> dependencies, `.env` parity, the damped sum's arithmetic, price banding, whether
+> `build_graph.py` and `graph_schema.sql` still agree, and whether the front end still
+> compiles against `api.py`'s shape. **The evals check the rest** — anything involving a
+> model — on a machine that already has credentials. CI still holds no keys.
+
+Four CI jobs: `structure`, `dependencies`, `tests`, `frontend`. Plus a scheduled
+`Price staleness` workflow that opens an issue when `PRICES_CHECKED_ON` passes
+`STALE_AFTER_DAYS`, because nothing in the repository changes when the outside world does.
+
+**A green build is not a working system — proved 30 Aug.** Disabling the critic left
+`should_continue` returning `"review"` while the branch map declared only `{"act",
+"critic"}`, so every request 500'd. `repo_check` passed (the file parses), the unit tests
+passed (none touch the graph), CI went 4/4 green on a completely broken application. The
+blast-radius rule exists for exactly this and was skipped because the change was one line.
 
 ---
 
@@ -164,6 +201,10 @@ python build_graph.py --status
 | `api.py` | `static/index.html` only |
 | `build_graph.py` / `graph_schema.sql` | `core.graph_find`, `tools.find_films_by_fact`, `eval_agent.py` |
 | `repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
+| `providers.py` | `core.availability`, `tools.check_availability`, `api.py`'s panel, `tests/test_providers.py`. It also owns `REGION`, so `build_graph.py` too |
+| `agent.py`'s graph wiring | **run the agent, not just the tests.** `python agent.py`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
+| `api.py` | `frontend/src/types.ts` — they are a contract. `npm run build` is what enforces it |
+| `frontend/src/*` | `npm run build` (typecheck + bundle), then look at it in a browser |
 | a job's `name:` in `.github/workflows/ci.yml` | **the branch ruleset on GitHub.** It requires check names as plain strings, so renaming a job leaves the ruleset waiting forever for a check that no longer exists — no red cross, no error, just a PR stuck on "Expected". Rename both in the same sitting |
 | `data/golden_set.json` | `eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
 | the corpus (`derive_corpus.py`, `chunk_plots.py`) | re-embed, then **both** evals |
