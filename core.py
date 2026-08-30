@@ -12,6 +12,8 @@ import psycopg
 from botocore.config import Config
 from dotenv import load_dotenv
 
+import providers
+
 load_dotenv()
 
 DIMENSIONS = 1024
@@ -574,6 +576,115 @@ def graph_find(director=None, actor=None, genre=None, similar_to=None, limit=GRA
     return {"films": films[:limit], "unknown": {}}
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# WHERE CAN I ACTUALLY WATCH IT
+#
+# The hardest constraint in the whole system. "Tense" is a matter of opinion;
+# "on Netflix in the US tonight" is not. It has a yes/no answer, so it is
+# answered from the graph and never from the model.
+#
+# FOUR ANSWERS, NOT TWO. Collapsing any pair of these is how a recommender
+# starts lying:
+#     the film is not in this catalogue at all
+#     the film is here, but we hold no listing for this country
+#     we hold a listing, and nothing on it is a subscription
+#     we hold a listing, here is what it costs
+#
+# The graph stores exactly what TMDB said -- four separate Paramount+ entries,
+# resellers, the lot. providers.py does the tidying at this boundary.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_FILM_FOR_AVAILABILITY_SQL = """
+SELECT node_key, name,
+       properties->>'release_date'    AS release_date,
+       properties->>'runtime_minutes' AS runtime_minutes,
+       properties->>'poster_path'     AS poster_path
+FROM graph_nodes
+WHERE node_type = 'film'
+  AND (lower(name) = lower(%(exact)s) OR lower(name) LIKE lower(%(loose)s))
+ORDER BY (lower(name) = lower(%(exact)s)) DESC, length(name)
+LIMIT 1
+"""
+
+_AVAILABILITY_SQL = """
+SELECT e.edge_type, p.node_key, p.name,
+       p.properties->>'logo_path' AS logo_path,
+       e.properties->>'link'      AS link
+FROM graph_edges e
+JOIN graph_nodes p ON p.node_key = e.to_key
+WHERE e.from_key  = %(film_key)s
+  AND e.source    = %(source)s
+  AND e.edge_type = ANY(%(types)s)
+"""
+
+
+@traceable(run_type="retriever", name="graph_availability (exact facts, no vectors)")
+def availability(title):
+    """Where one film can be watched, priced and grouped, cheapest band first.
+
+    Returns:
+        {"found": bool,          # is the film in this catalogue at all
+         "has_listing": bool,    # do we hold ANY offer for this country
+         "title", "release_date", "runtime_minutes", "poster_path",
+         "region", "checked_on", "stale_days", "link",
+         "offers": [ ... ]}      # already sorted; each carries price_text
+
+    `found` and `has_listing` are deliberately separate. "I don't know" and
+    "it isn't available" are different sentences, and a caller that cannot tell
+    them apart will confidently say the wrong one.
+    """
+    empty = {"found": False, "has_listing": False, "title": title,
+             "release_date": None, "runtime_minutes": None, "poster_path": None,
+             "region": providers.REGION,
+             "checked_on": providers.PRICES_CHECKED_ON.isoformat(),
+             "stale_days": providers.staleness_days(),
+             "link": None, "offers": []}
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        film = conn.execute(_FILM_FOR_AVAILABILITY_SQL, {
+            "exact": title, "loose": f"%{title}%"}).fetchone()
+        if not film:
+            return empty                       # not in the catalogue
+
+        film_key, name, release_date, runtime, poster = film
+        rows = conn.execute(_AVAILABILITY_SQL, {
+            "film_key": film_key,
+            "source": providers.SOURCE,
+            "types": list(providers.BAND_FROM_EDGE)}).fetchall()
+
+    offers, link = [], None
+    for edge_type, provider_key, provider_name, logo_path, deep_link in rows:
+        slug = provider_key.split(":", 1)[1]
+        offer = providers.describe(slug, provider_name, edge_type)
+        offer["logo_path"] = logo_path
+        offers.append(offer)
+        link = link or deep_link
+
+    offers.sort(key=providers.sort_key)
+
+    return {**empty,
+            "found": True,
+            "has_listing": bool(offers),
+            "title": name,
+            "release_date": release_date,
+            "runtime_minutes": int(runtime) if runtime else None,
+            "poster_path": poster,
+            "link": link,
+            "offers": offers}
+
+
+def graph_film_titles():
+    """Every film title in the catalogue, longest first.
+
+    Longest first matters: "Terminator 2: Judgment Day" must be tested before
+    "Terminator 2", or the shorter name matches and the longer one never gets a turn.
+    """
+    with psycopg.connect(DATABASE_URL) as conn:
+        rows = conn.execute(
+            "SELECT name FROM graph_nodes WHERE node_type = 'film'").fetchall()
+    return sorted((r[0] for r in rows), key=len, reverse=True)
+
+
 if __name__ == "__main__":
     # Self-test: real queries, real database, no model needed for the graph half.
     print("=" * 74)
@@ -595,6 +706,30 @@ if __name__ == "__main__":
             print(f"     {film['evidence'][:96]}")
         if not result["films"] and not result["unknown"]:
             print("   (no film satisfies all of those at once)")
+
+    print("\n" + "=" * 74)
+    print("AVAILABILITY — the hardest constraint, straight from the graph")
+    print("=" * 74)
+    for probe in ("Predator", "Alien", "Terminator 2", "The Seventh Seal"):
+        a = availability(probe)
+        if not a["found"]:
+            print(f"\n{probe}: not in this catalogue")
+            continue
+        if not a["has_listing"]:
+            print(f"\n{a['title']}: in the catalogue, but no {a['region']} listing held")
+            continue
+        print(f"\n{a['title']} — {len(a['offers'])} ways to watch in {a['region']}"
+              f"  (prices checked {a['checked_on']}, {a['stale_days']}d ago)")
+        band = None
+        for o in a["offers"][:7]:
+            if o["band"] != band:
+                band = o["band"]
+                print(f"   {providers.BAND_LABEL[band]}")
+            flag = "" if o["verified"] else "   ?"
+            via = f"  (via {o['resold_from']})" if o["resold_from"] else ""
+            print(f"      {o['display']:<26} {o['price_text']:<22}{flag}{via}")
+        if len(a["offers"]) > 7:
+            print(f"      … and {len(a['offers']) - 7} more")
 
     print("\n" + "=" * 74)
     print("VECTORS — same catalogue, scored")

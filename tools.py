@@ -34,7 +34,8 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from core import get_film, graph_find, search
+import providers
+from core import availability, get_film, graph_find, search
 
 MAX_RESULTS = 5
 
@@ -286,7 +287,88 @@ def find_films_by_fact(
     return "\n".join(lines)
 
 
-TOOLS = [search_films, lookup_film, find_films_by_fact]
+@tool
+def check_availability(title: str) -> str:
+    """Where ONE named film can be watched right now, and what each way costs.
+
+    Use this whenever the user asks about WATCHING or PAYING rather than about the
+    film itself:
+        "where can I watch Predator?"            -> title="Predator"
+        "is Alien on Netflix?"                   -> title="Alien"
+        "how much to rent Terminator 2?"         -> title="Terminator 2"
+        "anything here I can watch for free?"    -> call this once per candidate film
+
+    WHEN NOT TO USE IT. The boundary against the other three tools is what the user
+    is asking ABOUT, not whether they said a title:
+        what the film IS      — year, length, plot   -> lookup_film
+        a mood, plot or feeling                      -> search_films
+        a person, a genre, or "something like X"     -> find_films_by_fact
+        where to watch it, or what it costs          -> this tool
+
+    After recommending films, calling this for each one is correct and expected — a
+    recommendation the user cannot act on is only half an answer.
+
+    WHAT COMES BACK. Offers grouped into bands, cheapest first inside each band:
+        Free · Included in a subscription · Rent · Buy · Needs a TV provider login
+    Bands are never mixed, because a one-off $3.99 rental and a $12.99 monthly
+    subscription are not the same kind of cost and must not be ranked against
+    each other.
+
+    HOW TO REPORT IT — four rules, and breaking any of them makes the answer wrong:
+      1. Name only services this tool listed. Never add one you believe carries the
+         film. Your training is out of date about streaming rights by definition.
+      2. Quote prices exactly as written. "from $3.99" means a typical price for an
+         older title, not this film's price — keep the word "from". A line reading
+         "price unknown" must be reported as unknown, never dropped and never guessed.
+      3. Availability is a snapshot, not live. Say when it was checked and offer the
+         verification link. This is the most perishable fact in the catalogue.
+      4. Do not tell the user a film is unavailable when the answer is that we hold
+         no data. Those are different sentences.
+
+    FOUR DISTINCT EMPTY ANSWERS. Reporting any of them as another is a lie:
+        "not in this catalogue"     the film is absent entirely
+        "no listing held"           the film is here, we have no data for this country
+        "no subscription"           listings exist, but none of them is a subscription
+        a list                      these are facts; state them plainly
+    """
+    result = availability(title)
+
+    if not result["found"]:
+        return (f"'{title}' is not in the catalogue, so there is nothing to check. "
+                f"This was an exact lookup, not a guess. Tell the user the film is "
+                f"absent — do NOT say it is unavailable to watch, which is a different "
+                f"thing, and do not call search_films to look for it.")
+
+    if not result["has_listing"]:
+        return (f"{result['title']} is in the catalogue, but we hold NO "
+                f"{result['region']} availability data for it. Say exactly that. Do "
+                f"not say it is unavailable — we do not know that. Offer the user "
+                f"{result['link'] or 'a streaming search'} to check for themselves.")
+
+    lines = [f"{result['title']} — where to watch in {result['region']}",
+             f"availability and prices last checked {result['checked_on']} "
+             f"({result['stale_days']} days ago); rights change weekly"]
+
+    band = None
+    for offer in result["offers"]:
+        if offer["band"] != band:
+            band = offer["band"]
+            lines.append(f"  {providers.BAND_LABEL[band]}:")
+        via = f" (sold through {offer['resold_from']})" if offer["resold_from"] else ""
+        note = f" — {offer['note']}" if offer["note"] else ""
+        lines.append(f"    {offer['display']}{via}: {offer['price_text']}{note}")
+
+    if not any(o["band"] == "subscription" for o in result["offers"]):
+        lines.append("  NOTE: nothing here is included in a subscription. If the user "
+                     "asked about streaming, say plainly that it is rent-or-buy only.")
+
+    if result["link"]:
+        lines.append(f"  verify current availability: {result['link']}")
+
+    return "\n".join(lines)
+
+
+TOOLS = [search_films, lookup_film, find_films_by_fact, check_availability]
 
 
 if __name__ == "__main__":
@@ -325,3 +407,9 @@ if __name__ == "__main__":
                    {"director": "Quentin Tarantino"}):
         print(f"\ncall: find_films_by_fact({kwargs})")
         print(find_films_by_fact.invoke(kwargs))
+
+    # Four films, four different shapes of answer: a rich listing, a rent-or-buy
+    # only film, a film with free options, and one that is not here at all.
+    for probe in ["Predator", "Alien", "Terminator 2", "The Seventh Seal"]:
+        print(f"\ncall: check_availability({{'title': '{probe}'}})")
+        print(check_availability.invoke({"title": probe}))
