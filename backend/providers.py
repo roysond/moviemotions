@@ -27,7 +27,7 @@ THREE RULES THIS FILE OBEYS
        word is "from", never an exact figure.
 
 RUN IT
-    python providers.py     prints the table, then checks that every provider in
+    python -m backend.providers     prints the table, then checks that every provider in
                             the graph actually has an entry here
 """
 

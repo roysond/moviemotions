@@ -2,7 +2,7 @@
 
 import sys
 
-from core import search
+from backend.retrieval import search
 
 query = " ".join(sys.argv[1:]) or "creatures chasing you, very intense"
 

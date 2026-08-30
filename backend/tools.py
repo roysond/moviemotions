@@ -34,9 +34,9 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-import providers
-from core import (availability, excluded_by_filters, get_film, graph_find,
-                  search)
+from backend import providers
+from backend.graph import availability, graph_find
+from backend.retrieval import excluded_by_filters, get_film, search
 
 MAX_RESULTS = 5
 

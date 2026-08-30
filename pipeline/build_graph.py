@@ -5,9 +5,9 @@ The graph is DERIVED data, exactly like embeddings. The source of truth is
 movies.raw_payload; this script only reshapes it. Deleting the whole graph and
 rebuilding it must always be safe, and running this twice must change nothing.
 
-    python build_graph.py              build (idempotent)
-    python build_graph.py --status     what is in there now
-    python build_graph.py --remove     delete every node and edge
+    python -m pipeline.build_graph              build (idempotent)
+    python -m pipeline.build_graph --status     what is in there now
+    python -m pipeline.build_graph --remove     delete every node and edge
 
 Nodes    film · person · genre · keyword · provider
 Edges    person -ACTED_IN->            film
@@ -27,13 +27,22 @@ WHAT GOES IN AND WHAT DOES NOT
 """
 
 import os
+import sys
+
+# Run either way: `python -m pipeline.build_graph` from the repo root, or
+# `python pipeline/build_graph.py`. The second puts this file's OWN folder on the
+# path, not the repo root, so `backend` would not be importable without this line.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+import os
 import re
 import sys
 
 import psycopg
 from dotenv import load_dotenv
 
-import providers
+from backend import providers
 from psycopg.types.json import Json
 
 load_dotenv()

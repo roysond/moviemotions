@@ -1,6 +1,6 @@
 """Two files that must agree about the same set of names, checked by a machine.
 
-build_graph.py writes edges. graph_schema.sql has a CHECK constraint listing the
+pipeline/build_graph.py writes edges. graph_schema.sql has a CHECK constraint listing the
 edge types it will accept. Nothing has ever verified that those two lists match.
 If they drift, the failure arrives at 2am as a constraint violation in the middle
 of a load — not at review time, which is when it is cheap.
@@ -22,7 +22,7 @@ def allowed(column):
 
 
 def test_every_edge_type_build_graph_writes_is_allowed_by_the_schema():
-    import build_graph
+    from pipeline import build_graph
     written = set(build_graph.OFFER_EDGE.values()) | {
         "ACTED_IN", "DIRECTED", "HAS_GENRE", "HAS_KEYWORD"}
     assert written <= allowed("edge_type"), (
@@ -32,7 +32,7 @@ def test_every_edge_type_build_graph_writes_is_allowed_by_the_schema():
 def test_the_schema_allows_nothing_build_graph_never_writes():
     # Drift in the other direction: a type nobody produces is dead config, and dead
     # config is read as documentation by the next person.
-    import build_graph
+    from pipeline import build_graph
     written = set(build_graph.OFFER_EDGE.values()) | {
         "ACTED_IN", "DIRECTED", "HAS_GENRE", "HAS_KEYWORD"}
     assert allowed("edge_type") <= written, (
@@ -45,8 +45,8 @@ def test_node_types_match():
 
 
 def test_every_offer_category_maps_to_a_band():
-    import build_graph
-    import providers
+    from pipeline import build_graph
+    from backend import providers
     for edge_type in build_graph.OFFER_EDGE.values():
         assert edge_type in providers.BAND_FROM_EDGE, (
             f"{edge_type} is written to the graph but providers.py cannot band it")

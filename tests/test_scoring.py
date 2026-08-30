@@ -4,7 +4,8 @@ It has never been verified against a hand-computed number. Everything else about
 retrieval is a model's opinion; THIS is our own code, and it is checkable.
 """
 
-from core import _collapse_to_films, EVIDENCE_CHARS
+from backend.config import EVIDENCE_CHARS
+from backend.retrieval import _collapse_to_films
 
 
 def chunk(movie_id, score, text="x"):

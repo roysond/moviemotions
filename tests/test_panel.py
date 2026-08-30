@@ -1,6 +1,6 @@
 """Matching an answer against the catalogue — the rule that keeps the panel grounded."""
 
-from api import films_mentioned, reasons_for
+from backend.api import films_mentioned, reasons_for
 
 CATALOGUE = ["Predator", "Alien", "Terminator 2: Judgment Day", "Toy Story",
              "The Dark Knight", "Inception"]

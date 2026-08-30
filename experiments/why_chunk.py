@@ -16,7 +16,8 @@ import psycopg
 # this file lives in experiments/, so put the repo root on the import path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core import DATABASE_URL, MODEL_ID, embed  # noqa: E402
+from backend.config import DATABASE_URL, MODEL_ID
+from backend.models import embed  # noqa: E402
 
 CANDIDATE_K = 10
 

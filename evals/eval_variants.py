@@ -43,7 +43,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core import embed, search  # noqa: E402
+from backend.models import embed
+from backend.retrieval import search  # noqa: E402
 
 GOLDEN = "data/golden_set.json"
 TOP_N = 3

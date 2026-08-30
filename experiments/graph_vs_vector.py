@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 # default. Same line every script in here carries.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core import search
+from backend.retrieval import search
 
 load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]

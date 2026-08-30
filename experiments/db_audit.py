@@ -10,7 +10,7 @@ import sys
 import psycopg
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core import DATABASE_URL  # noqa: E402
+from backend.config import DATABASE_URL  # noqa: E402
 
 def rule(title):
     print("\n" + "=" * 78)

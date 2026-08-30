@@ -9,17 +9,22 @@ Built from scratch in passes as a working study of retrieval and agent design. I
 around a hosted RAG service: the chunking, retrieval, reranking, agent loop and evaluation harness
 are all in this repo.
 
+It then shows **where each film can actually be watched, and what each way costs.**
+
 ```
 you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ pgvector + rerank
            ▲                                   lookup_film         ──▶ exact title
            │                                   find_films_by_fact  ──▶ knowledge graph
+           │                                   check_availability  ──▶ graph + backend/providers.py
            └────── reads the results, decides again ◀────────────────────┘
                                │
                         human review  ⏸  approve / edit / send back
                                │
                                ▼
-                            answer
+                  answer  +  a panel of posters, reasons and prices
 ```
+
+Three of those four tools never touch a model.
 
 ---
 
@@ -38,19 +43,78 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films   
 
 ## Where the code lives
 
+Every folder holds files with the **same lifecycle**. That is the whole organising rule —
+if two files are run at different times, by different people, for different reasons, they
+do not belong together.
+
+```
+backend/     the application. This is what runs in production.
+pipeline/    builds the corpus. Run by hand, never serves a request.
+evals/       measures behaviour. Needs credentials, so never runs in CI.
+scripts/     dev tooling. Standard library only, no credentials, no database.
+frontend/    the React app.
+tests/       deterministic, no credentials, runs on every pull request.
+experiments/ DISPOSABLE. Delete any of these without a second thought.
+```
+
+`experiments/` is the only folder meant to be thrown away. Everything else is permanent;
+the folders separate them by *job*, not by importance.
+
+### `backend/` — the application
+
 | file | what it is |
 |---|---|
-| `core.py` | **the engine.** Embedding, the retrieval SQL, reranking, film collapse, exact title lookup. Everything else imports this; nothing here imports anything else in the repo |
-| `tools.py` | what the agent is allowed to do. The docstrings *are* the interface — only they travel to the model |
-| `agent.py` | the LangGraph loop: think → act → think → review. The conditional edge is the whole difference between a pipeline and an agent |
-| `api.py` | HTTP over the *same compiled graph*. No prompts, no tools, no logic. If it and `agent.py` ever disagree, one is a bug |
-| `build_graph.py` | derives the knowledge graph from `movies.raw_payload`. Idempotent; `--status` and `--remove` |
-| `experiments/graph_vs_vector.py` | the same factual question sent to both machines, side by side |
-| `eval_variants.py` · `eval_agent.py` | the two harnesses. See `docs/verification.md` |
-| `repo_check.py` | the structural checks CI runs. Standard library only, no credentials, no database |
+| `backend/config.py` | settings, read once at import so a misconfigured machine fails immediately |
+| `backend/models.py` | **the only file that names a vendor.** Every call that leaves this machine to reach a model: Bedrock for embeddings, Cohere for reranking. Swapping either means editing this file and nothing else |
+| `backend/retrieval.py` | the **vector** half — the search SQL, reranking, collapsing chunks to films, exact title lookup, and what a hard filter removed |
+| `backend/graph.py` | the **exact** half — facts, relationships, and availability. No model reaches this file |
+| `backend/providers.py` | the semantic layer: 34 US services with dated prices, sources and a `verified` flag. Owns `REGION` |
+| `backend/tools.py` | what the agent is allowed to do. The docstrings *are* the interface — only they travel to the model |
+| `backend/agent.py` | the LangGraph loop: think → act → think → review. The conditional edge is the whole difference between a pipeline and an agent |
+| `backend/api.py` | HTTP over the *same compiled graph*. No prompts, no tools, no logic. If it and `backend/agent.py` ever disagree, one is a bug |
+| `backend/tracing.py` | one optional dependency, isolated, so neither half has to depend on the other to get it |
 
-**One caution.** `api.py` parses `tools.py`'s plain-text output with a regular expression, so
-changing the tool's wording can silently break the web display with no error anywhere.
+**The dependency direction never reverses:**
+
+```
+config ──▶ models ──▶ retrieval ──┐
+   └─────▶ graph ─────────────────┼──▶ tools ──▶ agent ──▶ api
+           providers ─────────────┘
+```
+
+`backend/retrieval.py` and `backend/graph.py` share a database URL and nothing else — which is exactly
+why they are two files and not one. They were a single module — **core**, 786 lines doing five jobs — and every change to
+it put the whole repository in the blast radius. Retired on 30 Aug 2026.
+
+### The other folders
+
+| file | what it is |
+|---|---|
+| `pipeline/fetch_titles.py` · `pipeline/fetch_plots.py` | pull raw data from external sources to disk |
+| `pipeline/chunk_plots.py` · `pipeline/derive_corpus.py` | turn raw text into chunks and derived descriptions |
+| `pipeline/load_corpus.py` · `pipeline/load_derived.py` | embed and write to Postgres |
+| `pipeline/build_graph.py` | derives the knowledge graph from `movies.raw_payload`. Idempotent; `--status` and `--remove` |
+| `evals/eval_variants.py` · `evals/eval_agent.py` | the two harnesses. See `docs/verification.md` |
+| `scripts/repo_check.py` | the structural checks CI runs. Standard library only |
+| `scripts/build_docs.py` | renders the markdown docs to HTML. **The HTML is derived — never edit it** |
+| `search.py` | retrieval from the command line, no agent. The one entry point left at the root |
+| `experiments/graph_vs_vector.py` | the same factual question sent to both machines, side by side |
+
+**Run everything from the repository root, as a module:**
+
+```bash
+python -m backend.tools           # the spec the model receives, then real calls
+python -m backend.graph           # facts and availability, no model involved
+python -m backend.retrieval       # the vector path, scored
+python -m pipeline.build_graph --status
+python -m evals.eval_agent
+python -m scripts.repo_check
+uvicorn backend.api:app --reload --port 8000
+```
+
+**One caution.** `backend/api.py` parses `backend/tools.py`'s plain-text output with a
+regular expression, so changing the tool's wording can silently break the web display
+with no error anywhere.
 
 ---
 
@@ -148,19 +212,19 @@ embeddings are derived data that go stale the moment a model changes. **Keep the
 everything else from it.** Run these in order:
 
 ```bash
-python fetch_titles.py      # TMDB → data/raw/tmdb_*.json            (needs TMDB_READ_TOKEN)
-python fetch_plots.py       # IMDb id → Wikidata → Wikipedia plots   → data/plots.json
-python load_corpus.py       # films + overview chunks                → Postgres
-python derive_corpus.py     # a model writes mood/theme text         → data/derived.json
-python load_derived.py      # derived text → chunks + embeddings
-python chunk_plots.py       # semantic → recursive → overlap chunking, embeds each chunk
-python build_graph.py       # films · people · genres · keywords → nodes + edges
+python -m pipeline.fetch_titles      # TMDB → data/raw/tmdb_*.json            (needs TMDB_READ_TOKEN)
+python -m pipeline.fetch_plots       # IMDb id → Wikidata → Wikipedia plots   → data/plots.json
+python -m pipeline.load_corpus       # films + overview chunks                → Postgres
+python -m pipeline.derive_corpus     # a model writes mood/theme text         → data/derived.json
+python -m pipeline.load_derived      # derived text → chunks + embeddings
+python -m pipeline.chunk_plots       # semantic → recursive → overlap chunking, embeds each chunk
+python -m pipeline.build_graph       # films · people · genres · keywords → nodes + edges
 ```
 
-`chunk_plots.py` is resumable: it commits per film and caches vectors by content hash, so a rate
+`pipeline/chunk_plots.py` is resumable: it commits per film and caches vectors by content hash, so a rate
 limit costs time, never finished work. Re-run it and it continues.
 
-> **Wikimedia may refuse an automated fetch** under its robot policy. If `fetch_plots.py` returns
+> **Wikimedia may refuse an automated fetch** under its robot policy. If `pipeline/fetch_plots.py` returns
 > 403s the plots have to be gathered another way; everything downstream is unaffected.
 
 ---
@@ -171,10 +235,21 @@ limit costs time, never finished work. Re-run it and it continues.
 evidence, and the human-review step with buttons:
 
 ```bash
-uvicorn api:app --reload --port 8000
+uvicorn backend.api:app --reload --port 8000
 ```
 
-Then open **http://127.0.0.1:8000**
+Then open **http://127.0.0.1:8000** for the original page, or **/app** for the two-panel
+React interface once it has been built.
+
+**The React front end**, in development, with hot reload:
+
+```bash
+cd frontend && npm install && npm run dev     # then open http://localhost:5173
+```
+
+Vite serves the app on :5173 and forwards `/api` to FastAPI on :8000. `npm run build`
+typechecks and writes the bundle into `static/app`; Vite then exits — nothing of it runs
+in production.
 
 **Command line**, with the review step in the terminal:
 
@@ -195,11 +270,27 @@ python search.py "a father and son separated and trying to find each other"
 Two harnesses, measuring two different things.
 
 ```bash
-python eval_variants.py     # RETRIEVAL: achievable@3 and quiet@3 over a 25-case golden set
-python eval_agent.py        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
+python -m evals.eval_variants     # RETRIEVAL: achievable@3 and quiet@3 over a 25-case golden set
+python -m evals.eval_agent        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
+python -m pytest tests -q   # THE MATHS: no model, no database, 0.6 seconds
 ```
 
-`eval_variants.py` cannot see the agent at all. `eval_agent.py` measures the three ways a loop can
+**Faithfulness is reported and never gated on.** Two identical runs with no code change
+scored 0.78 and 0.72; within one run a single case scored 0.86 / 0.33 / 0.86 on three
+draws of the same answer. Treat anything under 0.10 as unresolvable. Gate on the
+deterministic; report the rest.
+
+**Reproduce CI's conditions before pushing:**
+
+```bash
+env -i HOME="$HOME" PATH="$PATH" .venv/bin/python -m pytest tests -q
+```
+
+`env -i` wipes the environment, which is the blank slate a CI runner gets. A normal run
+inherits everything you exported from `.env` and will lie to you — that is exactly how a
+wrong variable name passed locally and failed on the first clean machine.
+
+`evals/eval_variants.py` cannot see the agent at all. `evals/eval_agent.py` measures the three ways a loop can
 be wrong that a retrieval eval structurally cannot detect: the wrong tool, a film no tool returned,
 and claims the retrieved text does not support.
 
@@ -226,7 +317,7 @@ so raw recall@3 cannot reach 100% however good retrieval gets. Dividing by
 **The numbers above are arm D** — the context header stored in the vector, which is what runs in
 production. Arm B (header everywhere) scores higher on achievable@3, **92.9%**, and worse on
 quiet@3, **0.2543** vs 0.2232. That is the trade in one line: the arm that finds more also
-asserts more on questions with no answer. Run `python eval_variants.py` to see all four.
+asserts more on questions with no answer. Run `python -m evals.eval_variants` to see all four.
 
 ### Experiments
 
@@ -244,27 +335,42 @@ asserts more on questions with no answer. Run `python eval_variants.py` to see a
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request. Two jobs, two different questions:
+`.github/workflows/ci.yml` runs on every pull request. Four jobs, four different questions:
 
 ```bash
-python repo_check.py        # the same structural checks CI runs — run it before you push
+python -m scripts.repo_check        # the same structural checks CI runs — run it before you push
 ```
 
 | job | what it asks |
 |---|---|
-| **Structure** | Does every module parse? Is every third-party import pinned? Does `.env.example` match what the code reads? Does any doc point at a file that doesn't exist? Has anything secret-shaped been committed? Does `.gitignore` protect `.env` without swallowing a schema file? |
+| **Structure** | Does every module parse? Is every third-party import pinned? Does `.env.example` match what the code reads? Does any doc point at a file that doesn't exist? Has anything secret-shaped been committed? Does `.gitignore` protect `.env` without swallowing a schema file? Does every import of our own code point at a module that still exists there? |
 | **Dependencies** | Does `requirements.txt` actually install on a clean machine, and does the third-party stack import? |
+| **Unit tests** | Is the maths right? The damped sum against hand-computed numbers, price banding, and whether `pipeline/build_graph.py` and `graph_schema.sql` still agree about edge types |
+| **Front end builds** | Do `backend/api.py` and the React app still agree about their data? `npm run build` runs `tsc --noEmit` first, so a mismatch fails the pull request rather than the browser |
+
+A fifth workflow, `.github/workflows/staleness.yml`, runs **on a schedule** rather than on a change: it reads
+the date stamped in `backend/providers.py` and opens an issue when prices pass 30 days old. Nothing
+in a repository changes when Apple raises a price — only the calendar knows.
 
 **CI holds no credentials and never will.** A workflow with your AWS keys is a workflow
-that can leak them, and a pull request from a fork could read them. So CI checks
-*structure*; the evals check *behaviour*, on your machine where the keys already live.
+that can leak them, and a pull request from a fork could read them.
+
+The old line here said *CI checks structure, the evals check behaviour*. That stopped being
+true when `tests/` arrived. The honest version: **CI checks everything that gives the same
+answer every time; the evals check the rest**, on a machine that already has the keys.
+
+**A green build is not a working system.** Switching the critic off left a routing function
+returning a value the graph had not been told to expect, so every request returned 500 —
+and all four checks passed, because the file still parsed and no unit test touches the
+graph. Re-run the thing you changed.
 
 Every check exists because it caught something real — the `.gitignore` rule that silently
 excluded `graph_schema.sql`, three environment variables the code required and the
-template omitted, a doc pointing at a file that no longer existed. Found by hand once,
+template omitted, a doc pointing at a file that no longer existed, and three
+`import build_graph` lines left behind by the folder reorganisation. Found by hand once,
 then written down so they cannot recur.
 
-`repo_check.py` uses the standard library only. A gate that needs a dependency install
+`scripts/repo_check.py` uses the standard library only. A gate that needs a dependency install
 can be broken *by* a dependency.
 
 ---
@@ -312,7 +418,7 @@ in prose, and the model obeys them.
   threshold problem.
 - ~~**Rerank scores are not stable run to run.**~~ **Retracted 26 Aug 2026 — this was wrong.**
   Measured: the same query run twice returns identical scores to four decimal places, and
-  `eval_variants.py` has reproduced exactly on separate days. `cohere/rerank-v3.5` also has
+  `evals/eval_variants.py` has reproduced exactly on separate days. `cohere/rerank-v3.5` also has
   exactly one provider on OpenRouter, so there is no backend to route between. The claim came
   from one genre experiment that scored 96.6% once and 86.2% twice; the corpus was being
   changed at the time, which explains it far better than the model did.
