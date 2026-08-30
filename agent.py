@@ -311,7 +311,11 @@ builder.add_node("act", ToolNode(TOOLS))     # runs whatever the model asked for
 builder.add_node("critic", critic, destinations=("review",))
 builder.add_node("review", review, destinations=("think", END))
 builder.add_edge(START, "think")
-builder.add_conditional_edges("think", should_continue, {"act": "act", "critic": "critic"})
+# Every value should_continue can return must appear here. It can return "review"
+# whenever CRITIC_ENABLED is False, and LangGraph rejects a destination that is
+# not declared — so switching the critic off broke the graph until this line grew.
+builder.add_conditional_edges("think", should_continue,
+                              {"act": "act", "critic": "critic", "review": "review"})
 builder.add_edge("act", "think")             # <-- the backward edge IS the loop
 # A checkpointer is what makes a pause resumable. InMemorySaver keeps it in this
 # process; swapping in a Postgres saver is the only change needed to survive a restart.

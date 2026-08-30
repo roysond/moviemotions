@@ -88,13 +88,16 @@ export default function ResultsPanel({ films, busy }: { films: FilmPanel[]; busy
         {films.length > 0 && <span className="stamp">{films[0].region}</span>}
       </div>
 
-      {films.length === 0 && (
-        <div className="blank">
-          {busy ? 'Working…' : 'Ask for something and the films will appear here.'}
-        </div>
-      )}
-
-      {films.map((film) => <FilmRow key={film.title} film={film} />)}
+      {/* One row per film, each an equal share of the panel. The page itself never
+          scrolls — only each film's offer list does, inside its own row. */}
+      <div className="filmlist">
+        {films.length === 0 && (
+          <div className="blank">
+            {busy ? 'Working…' : 'Ask for something and the films will appear here.'}
+          </div>
+        )}
+        {films.map((film) => <FilmRow key={film.title} film={film} />)}
+      </div>
     </section>
   )
 }

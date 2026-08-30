@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ChatPanel from './ChatPanel'
 import ResultsPanel from './ResultsPanel'
-import { approve, ask, panelFor, toolLines } from './api'
+import { approve, ask, excludedTitles, panelFor, toolLines } from './api'
 import type { ChatLine, FilmPanel } from './types'
 
 // Chat on the left at 1/3, results on the right at 2/3.
@@ -15,6 +15,7 @@ export default function App() {
   const [draft, setDraft] = useState<string | null>(null)   // waiting on you
   const [films, setFilms] = useState<FilmPanel[]>([])
   const [busy, setBusy] = useState(false)
+  const [excluded, setExcluded] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   function say(line: ChatLine) {
@@ -28,8 +29,15 @@ export default function App() {
     try {
       const result = await ask(question, threadId)
       toolLines(result.trace).forEach(say)
+      const keepOut = excludedTitles(result.trace)
+      setExcluded(keepOut)
       if (result.state === 'review') {
+        // The films are already known — the pause is about SENDING the message,
+        // not about discovering them. Making you approve before you can see the
+        // posters gets the human-in-the-loop step backwards: you are reviewing
+        // the wording, so you should be looking at the evidence while you do it.
         setDraft(result.draft ?? '')
+        setFilms(await panelFor(result.draft ?? '', keepOut))
       } else {
         await finish(result.answer ?? '')
       }
@@ -48,7 +56,7 @@ export default function App() {
     try {
       const result = await approve(threadId)
       setDraft(null)
-      await finish(result.answer ?? draft ?? '')
+      await finish(result.answer ?? draft ?? '')   // refresh: the text may have changed
     } catch (problem) {
       setError(String(problem))
     } finally {
@@ -58,7 +66,7 @@ export default function App() {
 
   async function finish(answer: string) {
     say({ speaker: 'bot', text: answer })
-    setFilms(await panelFor(answer))
+    setFilms(await panelFor(answer, excluded))
   }
 
   return (
