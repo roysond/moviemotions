@@ -49,6 +49,23 @@ export function excludedTitles(trace: AdvanceResponse['trace']): string[] {
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
 }
 
+// WHAT EACH TOOL ACTUALLY TOUCHES.
+//
+// Printed under every call so the path through the system is visible from the
+// screen instead of having to be remembered: which node ran it, which services
+// it reaches, which tables it reads, and whether a model is involved at all.
+const TOUCHES: Record<string, string> = {
+  search_films:
+    'Bedrock (embed) → pgvector cosine over chunks + chunk_embeddings ' +
+    '→ Cohere rerank → damped sum collapses chunks to films',
+  lookup_film:
+    'exact SQL on movies — no model, no vectors, no scores',
+  find_films_by_fact:
+    'exact SQL on graph_nodes + graph_edges — no model, no scores',
+  check_availability:
+    'graph_nodes + graph_edges (AVAILABLE_*) → priced and banded by providers.py',
+}
+
 // What the agent asked for, ARGUMENTS INCLUDED.
 //
 // "called search_films" tells you nothing you can act on. The query the agent
@@ -64,6 +81,12 @@ export function toolLines(trace: AdvanceResponse['trace']): ChatLine[] {
         .filter(([, value]) => value !== null && value !== '')
         .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
         .join(', ')
-      return { speaker: 'tool' as const, text: `${step.tool}(${args})` }
+      const touches = TOUCHES[step.tool ?? ''] ?? 'unknown tool'
+      // `act` is the LangGraph node that runs tools; `think` is the node that
+      // asked for this one. Naming it makes the loop visible rather than implied.
+      return {
+        speaker: 'tool' as const,
+        text: `think ▸ act   ${step.tool}(${args})\n            ${touches}`,
+      }
     })
 }

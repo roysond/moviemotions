@@ -618,6 +618,54 @@ WHERE e.from_key  = %(film_key)s
 """
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# WHAT DID THE FILTER THROW AWAY?
+#
+# A hard constraint is enforced exactly. That is its value and its danger: a
+# constraint the user never asked for does not DEGRADE the results, it REMOVES
+# the right answer and leaves no trace that it did.
+#
+# Observed 30 Aug 2026. Asked for "something fictional with magic", the agent
+# sent max_runtime=120 — a limit carried over from an earlier turn and never
+# mentioned in that question. Harry Potter runs 152 minutes, so it never entered
+# the pool. The ranker returned Finding Nemo and The Hangover, both exactly 100
+# minutes, and looked simply bad at its job.
+#
+# So the filter now reports its own casualties. A silent exclusion becomes a
+# visible one, and the agent gets told what it cost.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_EXCLUDED_SQL = """
+SELECT m.title, m.runtime_minutes, EXTRACT(YEAR FROM m.release_date)::int AS year
+FROM movies m
+WHERE m.source = 'tmdb'
+  AND ((%(max_runtime)s::int IS NOT NULL AND m.runtime_minutes > %(max_runtime)s::int)
+    OR (%(min_runtime)s::int IS NOT NULL AND m.runtime_minutes < %(min_runtime)s::int)
+    OR (%(after_year)s::int  IS NOT NULL
+        AND EXTRACT(YEAR FROM m.release_date) < %(after_year)s::int)
+    OR (%(before_year)s::int IS NOT NULL
+        AND EXTRACT(YEAR FROM m.release_date) > %(before_year)s::int))
+ORDER BY m.title
+"""
+
+
+def excluded_by_filters(max_runtime=None, min_runtime=None,
+                        after_year=None, before_year=None):
+    """Which catalogue films these hard filters keep out of the pool entirely.
+
+    Cheap: one indexed read over 20 rows, no vectors and no model. Returns
+    [{title, runtime_minutes, year}, ...], empty when no filter is set.
+    """
+    if not any((max_runtime, min_runtime, after_year, before_year)):
+        return []
+    with psycopg.connect(DATABASE_URL) as conn:
+        rows = conn.execute(_EXCLUDED_SQL, {
+            "max_runtime": max_runtime, "min_runtime": min_runtime,
+            "after_year": after_year, "before_year": before_year}).fetchall()
+    return [{"title": title, "runtime_minutes": runtime, "year": year}
+            for title, runtime, year in rows]
+
+
 @traceable(run_type="retriever", name="graph_availability (exact facts, no vectors)")
 def availability(title):
     """Where one film can be watched, priced and grouped, cheapest band first.

@@ -16,6 +16,10 @@ export default function App() {
   const [films, setFilms] = useState<FilmPanel[]>([])
   const [busy, setBusy] = useState(false)
   const [excluded, setExcluded] = useState<string[]>([])
+  // How many tool calls have already been printed. /api/ask returns the trace of
+  // the WHOLE thread every time, not just this turn, so without this every past
+  // tool call is reprinted on every question — three by the third message.
+  const [shownTools, setShownTools] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   function say(line: ChatLine) {
@@ -28,7 +32,9 @@ export default function App() {
     say({ speaker: 'you', text: question })
     try {
       const result = await ask(question, threadId)
-      toolLines(result.trace).forEach(say)
+      const calls = toolLines(result.trace)
+      calls.slice(shownTools).forEach(say)      // only what is new this turn
+      setShownTools(calls.length)
       const keepOut = excludedTitles(result.trace)
       setExcluded(keepOut)
       if (result.state === 'review') {
