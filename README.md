@@ -239,7 +239,17 @@ uvicorn backend.api:app --reload --port 8000
 ```
 
 Then open **http://127.0.0.1:8000** for the original page, or **/app** for the two-panel
-React interface once it has been built.
+React interface.
+
+`static/app/` is build output — derived, gitignored, and absent from a fresh clone — so
+**/app answers 503 with instructions until you build it**:
+
+```bash
+cd frontend && npm install && npm run build     # writes static/app/, then restart uvicorn
+```
+
+Restarting matters: the server mounts `/app/assets/` only if that folder exists when it
+starts, so a build made while the server is running is not picked up until it reloads.
 
 **The React front end**, in development, with hot reload:
 

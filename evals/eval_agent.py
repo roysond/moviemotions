@@ -45,7 +45,10 @@ import sys
 import psycopg
 from dotenv import load_dotenv
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The repository root is TWO levels up from a file in evals/. One level up is evals/
+# itself, which puts nothing useful on the path — this line only ever appeared to work
+# because `python -m evals.eval_agent` is run from the root, which is already on it.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.agent import auto_approve, converse, split_content  # noqa: E402
 from backend.config import DATABASE_URL  # noqa: E402
 
