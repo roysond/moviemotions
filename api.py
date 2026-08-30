@@ -191,15 +191,21 @@ POSTER_SIZE = "w342"
 LOGO_SIZE = "w45"
 
 
-def films_mentioned(answer):
+def films_mentioned(answer, titles=None):
     """Which catalogue films does this answer actually name, in the order named?
 
     Only exact catalogue titles count. The panel can never show a film the agent
     did not name, which is the same grounding rule the agent itself works under.
     """
+    # `titles` is injected by the tests so this can be checked without a database.
+    # A function that reaches out and fetches its own input cannot be tested cheaply.
+    if titles is None:
+        titles = graph_film_titles()
+    titles = sorted(titles, key=len, reverse=True)
+
     lowered = answer.lower()
     found, claimed = [], []
-    for title in graph_film_titles():          # longest first
+    for title in titles:                       # longest first
         at = lowered.find(title.lower())
         if at == -1:
             continue
