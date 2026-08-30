@@ -25,6 +25,16 @@ The four things `docs/change-guard.md` asks for at project start, kept current.
 query shape had none either. A different denominator is a different number — the drop from
 0.78 to 0.72 measures the new cases, not a regression.
 
+**The noise floor is 0.06, not 0.05 — measured 29 Aug 2026.** Two runs of
+`eval_agent.py` with ZERO code changes between them scored **0.78 and 0.72**. Within the
+second run, case 2's three draws were **0.86 / 0.33 / 0.86** — a spread of 0.53 on one
+case. Treat anything under **0.10** as unresolvable on this setup. The older 0.05 figure
+below understated it and should not be used.
+
+**Faithfulness is parked as a gate, 29 Aug 2026.** It is still reported, never gated on.
+An instrument that cannot resolve the effect cannot prove its absence, and arguing about
+0.06 swings was costing days. Revisit only if the judging method changes.
+
 **A change under 0.05 on the headline is noise.** Measured, not assumed: the SAME frozen
 answers, re-judged at temperature 0, scored 0.87 / 0.75 / 0.79 on a single draw each.
 Averaging 3 draws per case brought two consecutive runs to 0.76 and 0.79.
@@ -51,7 +61,43 @@ judged by `google/gemini-3.5-flash-lite`. Different judge, one draw, no error ba
 **Reproduce without re-running the agent:** `python eval_agent.py --rejudge` judges the
 frozen answers in `data/agent_transcript.json`. That is the only way to separate the
 judge's variance from the agent's.
-| graph | **566 nodes · 634 edges** | film 20 · genre 13 · keyword 323 · person 210 | exact |
+| graph | **600 nodes · 919 edges** | film 20 · genre 13 · keyword 323 · person 210 · **provider 34** | exact |
+
+**Availability added 29 Aug 2026.** 34 US providers, 285 `AVAILABLE_*` edges
+(rent 118 · buy 100 · flatrate 60 · ads 4 · free 3). Predicted 600/919 before the run;
+got 600/919, twice, identically. Prices live in `providers.py` with a checked-on date;
+`python providers.py` fails loudly if the graph holds a provider that file cannot price.
+
+**RESOLVED — the critic was destroying correct answers. 29 Aug 2026.**
+`expected films` fell 8/8 → 7/8 and reproduced across three runs. A diagnostic print of
+WHICH lines the critic struck settled it in one run:
+
+    [1] struck: 1. **Predator (1987)**
+    [4] struck: The Shawshank Redemption is a gripping, determined story about a man
+                who is wrongly imprisoned…
+    [8] struck: - **Predator (1987)**: This film follows a team of elite commandos…
+
+Case 1 came from `lookup_film`, an exact database lookup — it deleted the film's own name.
+Case 4 was the correct answer to its query. Case 8's line was near-VERBATIM from the tool
+output, i.e. the most grounded sentence in the answer. The availability change was
+exonerated; the critic did it.
+
+**Two design faults, both now demonstrated rather than suspected:**
+1. **A line is not a claim.** "1. **Predator (1987)**" and "Based on the search results…"
+   assert nothing, so "is this supported by the evidence?" correctly returns no, and they
+   are deleted. The unit of judgement is wrong.
+2. **It can only delete.** One bad judgement destroys information irreversibly and
+   silently. A verification step that can only delete is strictly more dangerous than one
+   that can only warn.
+
+**Fix before re-enabling** (`CRITIC_ENABLED` in agent.py, currently False): judge by CLAIM
+TYPE — the agent may interpret what it was given, it may not add facts it was not given —
+operate on claims rather than lines, and send a line back for ONE rewrite instead of
+deleting it. Anything that can only delete does not go back in.
+
+**Method note.** "2 of 4 lines struck" was printed for three runs and told us nothing.
+Printing the struck TEXT solved it immediately. A count says something happened; only the
+content says what.
 
 **Measured over 25 cases, arm D** (context header in the stored vector — what production runs).
 Case 21 lists four expected films, so raw recall@3 cannot reach 100%; the ceiling is

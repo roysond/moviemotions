@@ -38,7 +38,8 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from agent import AGENT_MODEL, MAX_PASSES, graph, split_content
-from core import search
+import providers
+from core import availability, graph_film_titles, search
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="MovieMotions")
@@ -172,3 +173,103 @@ class Retrieve(BaseModel):
 def raw_search(request: Retrieve):
     """Retrieval with no agent at all — for comparing what the model was given."""
     return {"query": request.query, "results": search(request.query, request.limit)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THE RIGHT-HAND PANEL
+#
+# The chat produces prose. The panel needs rows. Rather than make the agent emit
+# JSON — which would bend the tool contract to suit a screen — the answer is
+# matched against the catalogue HERE, at the edge. Same reasoning as parse_films.
+#
+# Image URLs are built here, not in the browser, so TMDB's URL shape lives in one
+# place. If it ever changes, one file changes.
+# ─────────────────────────────────────────────────────────────────────────────
+
+TMDB_IMAGE = "https://image.tmdb.org/t/p"
+POSTER_SIZE = "w342"
+LOGO_SIZE = "w45"
+
+
+def films_mentioned(answer):
+    """Which catalogue films does this answer actually name, in the order named?
+
+    Only exact catalogue titles count. The panel can never show a film the agent
+    did not name, which is the same grounding rule the agent itself works under.
+    """
+    lowered = answer.lower()
+    found, claimed = [], []
+    for title in graph_film_titles():          # longest first
+        at = lowered.find(title.lower())
+        if at == -1:
+            continue
+        # A longer title already covering this span wins; "Terminator 2" must not
+        # match again inside "Terminator 2: Judgment Day".
+        if any(start <= at < end for start, end in claimed):
+            continue
+        claimed.append((at, at + len(title)))
+        found.append((at, title))
+    return [title for _, title in sorted(found)]
+
+
+def reasons_for(answer, title):
+    """The agent's OWN sentences about this film — never our paraphrase."""
+    lines = []
+    for line in answer.splitlines():
+        if title.lower() in line.lower():
+            text = line.strip().lstrip("-*0123456789. ").strip()
+            text = re.sub(r"\*\*", "", text)
+            if text:
+                lines.append(text)
+    return lines[:3]
+
+
+class Panel(BaseModel):
+    answer: str
+
+
+@app.post("/api/panel")
+def panel(request: Panel):
+    """Everything the results panel draws: poster, the agent's reasons, banded offers."""
+    rows = []
+    for title in films_mentioned(request.answer):
+        found = availability(title)
+        if not found["found"]:
+            continue
+        offers = [{
+            "display": o["display"],
+            "band": o["band"],
+            "band_label": providers.BAND_LABEL[o["band"]],
+            "price_text": o["price_text"],
+            "verified": o["verified"],
+            "note": o["note"],
+            "resold_from": o["resold_from"],
+            "logo_url": f"{TMDB_IMAGE}/{LOGO_SIZE}{o['logo_path']}" if o.get("logo_path") else None,
+        } for o in found["offers"]]
+        rows.append({
+            "title": found["title"],
+            "year": (found["release_date"] or "----")[:4],
+            "runtime_minutes": found["runtime_minutes"],
+            "poster_url": (f"{TMDB_IMAGE}/{POSTER_SIZE}{found['poster_path']}"
+                           if found["poster_path"] else None),
+            "reasons": reasons_for(request.answer, found["title"]),
+            "has_listing": found["has_listing"],
+            "region": found["region"],
+            "checked_on": found["checked_on"],
+            "stale_days": found["stale_days"],
+            "link": found["link"],
+            "offers": offers,
+        })
+    return {"films": rows}
+
+
+@app.get("/api/availability/{title}")
+def one_film(title: str):
+    """Single film, for poking at by hand."""
+    return availability(title)
+
+
+@app.get("/app")
+def app_page():
+    """The React build. The original page stays at / until this one replaces it."""
+    return FileResponse(os.path.join(HERE, "static", "app", "index.html"))

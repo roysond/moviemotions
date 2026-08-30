@@ -217,10 +217,38 @@ def critic(state: MessagesState) -> Command:
 
     if struck:
         print(f"  [critic struck {len(struck)} of {len(lines)} lines]")
+        # DIAGNOSTIC ONLY — changes no behaviour, just makes the deletion visible.
+        # "2 of 4 lines struck" tells us nothing about WHICH claim was thrown away.
+        for i in sorted(struck):
+            print(f"      - struck: {lines[i - 1].strip()[:88]}")
 
     return Command(goto="review",
                    update={"messages": [AIMessage(content="\n".join(kept),
                                                   id=message.id)]})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THE CRITIC IS OFF. 29 Aug 2026.
+#
+# It was added to strip unsupported claims out of a draft, and it never earned its
+# place: the faithfulness gain it was meant to produce (0.75) sat inside the noise
+# floor, so it was shipped UNPROVEN. It is now the prime suspect in a regression
+# that reproduces — case 8 of the agent eval lost a correct film two runs running,
+# and the critic struck 2 of that answer's 4 lines both times.
+#
+# We are not diagnosing it right now, because the metric that would judge the fix
+# cannot resolve anything smaller than about 0.1 and the critic's effect is smaller
+# than that. Measuring with an instrument that cannot see the effect is how you
+# argue for a week about nothing.
+#
+# So: switch it off, return the agent to a state whose behaviour we understand, and
+# leave it off until the redesign in docs/verification.md is actually built —
+# judge by CLAIM TYPE (the agent may interpret what it was given; it may not add
+# facts it was not given) and send a line back for ONE rewrite instead of deleting it.
+#
+# Flip to True to run it again. The node, its prompt and its guards are untouched.
+# ─────────────────────────────────────────────────────────────────────────────
+CRITIC_ENABLED = False
 
 
 def should_continue(state: MessagesState) -> str:
@@ -230,7 +258,9 @@ def should_continue(state: MessagesState) -> str:
     run it. A reply without tool_calls is the model ANSWERING — and the answer now
     goes past a human before it goes out.
     """
-    return "act" if getattr(state["messages"][-1], "tool_calls", None) else "critic"
+    if getattr(state["messages"][-1], "tool_calls", None):
+        return "act"
+    return "critic" if CRITIC_ENABLED else "review"
 
 
 def review(state: MessagesState) -> Command:

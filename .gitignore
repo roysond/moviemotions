@@ -55,3 +55,7 @@ docs/ROADMAP.html
 docs/GROUNDWORK.html
 data/plots.json
 data/sentence_vectors.json
+
+# front end: dependencies and build output are derived, never committed
+frontend/node_modules/
+static/app/
