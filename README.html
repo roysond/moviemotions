@@ -193,7 +193,10 @@ python -m pipeline.build_graph       # films · people · genres · keywords →
 <h2 id="running-it">Running it</h2>
 <p><strong>Web UI</strong> — shows the tool chosen, its exact arguments, every result with its score and quoted evidence, and the human-review step with buttons:</p>
 <pre><code class="lang-bash">uvicorn backend.api:app --reload --port 8000</code></pre>
-<p>Then open <strong>http://127.0.0.1:8000</strong> for the original page, or <strong>/app</strong> for the two-panel React interface once it has been built.</p>
+<p>Then open <strong>http://127.0.0.1:8000</strong> for the original page, or <strong>/app</strong> for the two-panel React interface.</p>
+<p><code>static/app/</code> is build output — derived, gitignored, and absent from a fresh clone — so <strong>/app answers 503 with instructions until you build it</strong>:</p>
+<pre><code class="lang-bash">cd frontend &amp;&amp; npm install &amp;&amp; npm run build     # writes static/app/, then restart uvicorn</code></pre>
+<p>Restarting matters: the server mounts <code>/app/assets/</code> only if that folder exists when it starts, so a build made while the server is running is not picked up until it reloads.</p>
 <p><strong>The React front end</strong>, in development, with hot reload:</p>
 <pre><code class="lang-bash">cd frontend &amp;&amp; npm install &amp;&amp; npm run dev     # then open http://localhost:5173</code></pre>
 <p>Vite serves the app on :5173 and forwards <code>/api</code> to FastAPI on :8000. <code>npm run build</code> typechecks and writes the bundle into <code>static/app</code>; Vite then exits — nothing of it runs in production.</p>

@@ -32,7 +32,8 @@ import os
 import re
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, PlainTextResponse
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from pydantic import BaseModel
@@ -42,7 +43,13 @@ from backend import providers
 from backend.graph import availability, graph_film_titles
 from backend.retrieval import search
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# This file lives in backend/, so the repository root — where static/ and data/ sit —
+# is TWO levels up, not one. It was one level up until 30 Aug, when api.py still sat at
+# the root; the restructure moved the file and left the arithmetic behind, and every
+# page served from disk answered 500. Nothing static could catch it: the path is built
+# at run time out of a string.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATIC = os.path.join(ROOT, "static")
 app = FastAPI(title="MovieMotions")
 
 # "1. Predator (1987) · 107 min · score 0.614 · matched on its plot text"
@@ -132,7 +139,7 @@ class Resume(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(HERE, "static", "index.html"))
+    return FileResponse(os.path.join(STATIC, "index.html"))
 
 
 @app.get("/api/meta")
@@ -159,7 +166,7 @@ def resume(request: Resume):
 
 @app.get("/api/eval")
 def last_eval():
-    path = os.path.join(HERE, "data", "agent_eval.json")
+    path = os.path.join(ROOT, "data", "agent_eval.json")
     if not os.path.exists(path):
         return {"cases": []}
     return {"cases": json.load(open(path))}
@@ -343,7 +350,34 @@ def one_film(title: str):
     return availability(title)
 
 
+# The built page asks the browser for /app/assets/index-<hash>.js and its stylesheet.
+# Nothing served those: there is a route for /app and there was never one for what /app
+# then requests, so the page arrived and stayed blank. It went unnoticed because the dev
+# server (npm run dev, port 5173) serves its own assets — the bug only exists on the
+# port the finished build is served from.
+#
+# Mounted at /app/assets, NOT at /app: a mount at /app would swallow the route above.
+# Conditional because StaticFiles refuses to start on a directory that is not there, and
+# a missing build must give the message below, not stop the whole server from booting.
+_assets = os.path.join(STATIC, "app", "assets")
+if os.path.isdir(_assets):
+    app.mount("/app/assets", StaticFiles(directory=_assets), name="app-assets")
+
+
 @app.get("/app")
 def app_page():
-    """The React build. The original page stays at / until this one replaces it."""
-    return FileResponse(os.path.join(HERE, "static", "app", "index.html"))
+    """The React build. The original page stays at / until this one replaces it.
+
+    static/app/ is BUILD OUTPUT — derived, gitignored, and absent from a fresh clone.
+    Serving a file that is not there raised a bare 500 that said nothing; a missing
+    build is a normal state with an obvious remedy, so say the remedy.
+    """
+    page = os.path.join(STATIC, "app", "index.html")
+    if not os.path.exists(page):
+        return PlainTextResponse(
+            "The front end has not been built yet.\n\n"
+            "    cd frontend && npm install && npm run build\n\n"
+            "That writes static/app/. Then reload this page.\n"
+            "The original single-page UI is still at /.",
+            status_code=503)
+    return FileResponse(page)

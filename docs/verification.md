@@ -129,7 +129,7 @@ was attributed to the reranker on no evidence — the corpus was being modified 
 
 ```bash
 python -m scripts.repo_check         # structure: syntax, pins, env parity, dead refs, secrets, gitignore, local imports
-python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching
+python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching, root paths
 python -m backend.providers          # the price table, and whether the graph holds a provider it cannot price
 python -m backend.tools              # the spec the model reads, then every tool called for real
 python -m evals.eval_variants        # retrieval: achievable@3 and quiet@3 over data/golden_set.json
@@ -210,7 +210,7 @@ python -m pipeline.build_graph --status
 | `backend/graph.py` | `backend/tools.py`, `backend/api.py`'s panel, `evals/eval_agent.py` |
 | `backend/tools.py` | `backend/agent.py`, `evals/eval_agent.py`, and `backend/api.py`'s film parser — it reads the tool's prose |
 | `backend/agent.py` | `backend/api.py`, `evals/eval_agent.py` |
-| `backend/api.py` | `static/index.html` only |
+| `backend/api.py` | `static/index.html`, `frontend/src/types.ts`, and **the browser** — start the server and load `/` and `/app`. Its paths and its routes are built at run time and no static check can see them |
 | `pipeline/build_graph.py` / `graph_schema.sql` | `backend/graph.py`, `backend/tools.py`'s `find_films_by_fact`, `evals/eval_agent.py`, `tests/test_schema_drift.py` |
 | `scripts/repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
 | any markdown in `docs/` or `README.md` | `python -m scripts.build_docs`. The HTML is DERIVED; CI fails the PR if it was not rebuilt |

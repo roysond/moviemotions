@@ -92,7 +92,7 @@
 <hr>
 <h2 id="2-the-runner-one-command-each">2. The runner — one command each</h2>
 <pre><code class="lang-bash">python -m scripts.repo_check         # structure: syntax, pins, env parity, dead refs, secrets, gitignore, local imports
-python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching
+python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching, root paths
 python -m backend.providers          # the price table, and whether the graph holds a provider it cannot price
 python -m backend.tools              # the spec the model reads, then every tool called for real
 python -m evals.eval_variants        # retrieval: achievable@3 and quiet@3 over data/golden_set.json
@@ -127,7 +127,7 @@ python -m pipeline.build_graph --status</code></pre>
 <tr><td><code>backend/graph.py</code></td><td><code>backend/tools.py</code>, <code>backend/api.py</code>'s panel, <code>evals/eval_agent.py</code></td></tr>
 <tr><td><code>backend/tools.py</code></td><td><code>backend/agent.py</code>, <code>evals/eval_agent.py</code>, and <code>backend/api.py</code>'s film parser — it reads the tool's prose</td></tr>
 <tr><td><code>backend/agent.py</code></td><td><code>backend/api.py</code>, <code>evals/eval_agent.py</code></td></tr>
-<tr><td><code>backend/api.py</code></td><td><code>static/index.html</code> only</td></tr>
+<tr><td><code>backend/api.py</code></td><td><code>static/index.html</code>, <code>frontend/src/types.ts</code>, and <strong>the browser</strong> — start the server and load <code>/</code> and <code>/app</code>. Its paths and its routes are built at run time and no static check can see them</td></tr>
 <tr><td><code>pipeline/build_graph.py</code> / <code>graph_schema.sql</code></td><td><code>backend/graph.py</code>, <code>backend/tools.py</code>'s <code>find_films_by_fact</code>, <code>evals/eval_agent.py</code>, <code>tests/test_schema_drift.py</code></td></tr>
 <tr><td><code>scripts/repo_check.py</code> / <code>.github/workflows/ci.yml</code></td><td>each other — break the checker and the gate lies</td></tr>
 <tr><td>any markdown in <code>docs/</code> or <code>README.md</code></td><td><code>python -m scripts.build_docs</code>. The HTML is DERIVED; CI fails the PR if it was not rebuilt</td></tr>
