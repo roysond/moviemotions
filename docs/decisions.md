@@ -158,7 +158,7 @@ START → think ──has tool_calls?──→ act ──┐
 | **A pause is a return, not a block** | `interrupt()` throws, LangGraph writes state to the checkpointer, and `invoke()` returns. The process can exit. `Command(resume=x)` reloads and re-enters the node. This is why a checkpointer is mandatory: **without one, a pause is a crash with nothing to come back to** — and it is what lets the review survive an HTTP request ending |
 | **HITL offers three outcomes, not one** | Approve is a gate. `revise` — routing back to `think` with a note — makes the human *part of the loop*. It caught Terminator 2 recommended as "creatures hunting people": it scored **0.536**, above every threshold, and no metric could have caught it |
 | **The review surface must not misrepresent the draft** | `textwrap.wrap()` silently ate the newlines the model had correctly inserted, costing six revise cycles arguing with a display bug. **A review panel that lies is worse than no review**, because it manufactures disagreement neither party can see |
-| **`api.py` holds no agent logic** | It imports the same compiled graph the CLI runs. If the two ever disagree, one of them is a bug |
+| **`backend/api.py` holds no agent logic** | It imports the same compiled graph the CLI runs. If the two ever disagree, one of them is a bug |
 
 ---
 
@@ -235,7 +235,7 @@ no vendor knows your business rules.*
 |---|---|
 | **The offer type lives in the EDGE TYPE, not in `properties`** | Amazon both rents and sells Alien: two different facts about the same pair. The UNIQUE constraint keys on (from, to, type, source), so as a property the database would silently keep one and discard the other. **A difference that matters must sit where uniqueness is enforced** |
 | **The country lives in the edge's `source` (`tmdb:US`)** | "TMDB's US listing" and "TMDB's UK listing" are different claims. Adding a second country later cannot overwrite the first |
-| **The database keeps TMDB's mess; `providers.py` tidies at display time** | TMDB reports four separate Paramount+ entries for one thing a person calls Paramount+, and "Apple TV" beside "Apple TV Store" for a subscription and a shop. Storage stays faithful, presentation gets to be sensible. Keep the raw thing |
+| **The database keeps TMDB's mess; `backend/providers.py` tidies at display time** | TMDB reports four separate Paramount+ entries for one thing a person calls Paramount+, and "Apple TV" beside "Apple TV Store" for a subscription and a shop. Storage stays faithful, presentation gets to be sensible. Keep the raw thing |
 | **Every price carries a date and a source, and unverified ones say so** | Apple TV moved $12.99 → $14.99 on the day the file was written. 12 of 34 could not be confirmed from an official page and are marked, never guessed |
 | **A semantic layer is born from a screen, not from an architecture diagram** | It was an abstract roadmap item for weeks. It became necessary the moment a panel had to show "Paramount+" four times |
 | **Bands, never one sorted list** | $3.99 once and $8.99 a month are not the same kind of cost. A numeric sort puts the rental first and misleads. Free → Subscription → Rent → Buy → Needs a TV provider, cheapest within each |
@@ -243,10 +243,23 @@ no vendor knows your business rules.*
 | **Rent and buy are shown as "from $x"** | TMDB publishes no per-film price. The mockup said "$3.99" flat, which invented a precision we do not have |
 | **The panel fills from the DRAFT, not after approval** | The human-in-the-loop pause is for reviewing the WORDING. Hiding the evidence until after approval gets it backwards |
 | **The panel may only show films the agent named, and not ones it named to reject** | Same grounding rule the agent works under. It once showed Jurassic Park as pick #1 of an answer that said "…but are not Jurassic Park" |
-| **`REGION` is defined once, in `providers.py`** | A constant written down twice is a constant that will eventually disagree with itself |
+| **`REGION` is defined once, in `backend/providers.py`** | A constant written down twice is a constant that will eventually disagree with itself |
 | **A function that fetches its own input cannot be tested cheaply** | `films_mentioned` took a database call; it now takes a list. Same behaviour, injectable |
 | **Fixed pixels for the poster and its column; the offer list absorbs the resize** | A poster that scales with the window makes the row feel unstable, and the title and poster have a *correct* size. Only the offer list genuinely reads fine narrower |
 | **No structural breakpoints in the UI** | A narrow window gets a smaller version of the same layout, never a different one |
+
+### Hard constraints, and making them speak
+
+| Decision | Why |
+|---|---|
+| **A length or year describes the REQUEST, not the person** | A mood can carry across a conversation; "under two hours" cannot. The agent carried `max_runtime=120` into "something fictional with magic" and deleted the only film in the catalogue about magic |
+| **A hard filter must report what it removed** | Enforced exactly is the value AND the danger: a spurious constraint does not degrade the answer, it deletes the right one and leaves no trace. `max_runtime=120` removes **10 of 20 films** here |
+| **An alarm that fires on the normal case is not an alarm** | The first wording told the model to "drop it and search again" on *every* filtered search — including correct ones, and contradicting an instruction four paragraphs above it. Now it reports facts and leaves the judgement to the caller |
+| **Report facts, not directives, in a tool result** | Facts survive being read a hundred times. Directives get ignored, or obeyed in the wrong case |
+| **The trace shows what each tool TOUCHES** | Node, arguments, services, tables. Three of the four tools never reach a model, and the screen now says so as it runs — the architecture's central claim, checkable at a glance instead of remembered |
+| **Only this turn's tool calls are printed** | `/api/ask` returns the whole thread's trace every time. Reprinting all of it turned the log into a wall of repeats by the third question |
+
+---
 
 ### Testing and CI
 
@@ -259,6 +272,31 @@ no vendor knows your business rules.*
 | **Verify by running the real function the way the caller calls it** | A fix was "verified" in a scratch copy called with three arguments; the test calls it with two, and the fix depended entirely on the third |
 | **A count says something happened; only the content says what** | "critic struck 2 of 4 lines" told us nothing for three runs. Printing the struck TEXT solved it in one |
 | **Drift alarms run on a SCHEDULE, not on a change** | Nothing in the repository changes when Apple raises a price. Only the calendar knows |
+
+---
+
+## 30 Aug 2026 — SOLID audit, and the folder restructure it caused
+
+An honest read of the five principles against the code as it stood, and what each verdict
+changed. Two were already good, one does not apply, two were violated.
+
+| principle | verdict | what was done |
+|---|---|---|
+| **S** single responsibility | **violated** — the single **core** module was 786 lines and 14 functions doing embedding, retrieval, reranking, the knowledge graph, availability and filter reporting. The neighbours map said "change this → re-test everything", which is the cost written down | split into `backend/config.py`, `backend/models.py`, `backend/retrieval.py`, `backend/graph.py` and `backend/tracing.py`. The vector half and the exact half shared a database URL and nothing else |
+| **O** open/closed | **already good, and deliberate** — a new tool is a row in `TOOLS`, a new price a row in `SERVICES`, a new offer type a row in `OFFER_EDGE`, a new doc a row in `PAGES` | left alone. Extending by adding data rather than editing logic is the principle working |
+| **L** Liskov substitution | **not applicable** — five classes in the repo, zero inheritance. Claiming a pass would be theatre | nothing. Recorded so the gap is a decision, not an oversight |
+| **I** interface segregation | **the strongest part** — each tool takes exactly the arguments its job needs. Not merely clean: narrow, non-overlapping interfaces are what make the model route correctly. A single `do_movie_stuff(**kwargs)` would work in Python and fail as an agent | left alone |
+| **D** dependency inversion | **violated, and it was a promise** — Pass 0 named five seams as "must be right even here". Four were never built: `MovieDataSource`, `EmbeddingProvider`, `LLMProvider`, `Retriever`. No `Protocol` or `ABC` anywhere | `backend/models.py` now holds every call that leaves the machine to reach a model. It is a module boundary rather than an abstract class, because there is exactly one implementation and inventing an interface for one implementation is its own smell |
+
+| Decision | Why |
+|---|---|
+| **One folder per LIFECYCLE, not per topic** | 17 files in the root had six different lifecycles mixed together. `backend/` runs in production, `pipeline/` builds the corpus by hand, `evals/` needs credentials, `scripts/` is dev tooling, `tests/` is permanent, **`experiments/` is the only folder meant to be deleted** |
+| **`backend/models.py` is the only file that names a vendor** | Swapping Bedrock or Cohere means editing one file. `backend/retrieval.py` asks for `embed(text)` and does not know who answers. The roadmap called this `EmbeddingProvider`; this is the same idea with less ceremony |
+| **A module boundary instead of an abstract class** | One implementation does not justify an interface. The dependency still points inward, and nothing above `backend/models.py` names a vendor — which was the actual goal |
+| **Three of the five promised seams are dropped on purpose** | `MovieDataSource`, `LLMProvider` and `Retriever` are YAGNI until a second implementation exists. Written down so the gap reads as judgement rather than oversight. `EmbeddingProvider` was the one with teeth — changing the embedding model means re-embedding the corpus — and it is now `backend/models.py` |
+| **Everything runs from the root as a module** — `python -m backend.tools` | One rule for every entry point, no `sys.path` juggling for the reader, and the same commands work in CI |
+| **A dated log may name files that no longer exist** | The dead-reference check now exempts `docs/session-notes.md`. Rewriting old entries to match a new layout would falsify the record. Documents describing the CURRENT system are still checked strictly |
+| **The restructure was one pull request, pure moves, no logic changes** | One variable. And it was only safe because the harness existed first: 37 tests, four CI jobs, a docs gate and a structure gate all go red the moment a move breaks something |
 
 ---
 

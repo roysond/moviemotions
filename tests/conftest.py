@@ -28,7 +28,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))          # so `import core` works from the repo root
+sys.path.insert(0, str(ROOT))          # so `import backend...` works from the root
 
 # Values that must look real enough for a library to accept them at import time.
 # Everything else gets a plainly fake string, so a placeholder can never be mistaken
@@ -36,7 +36,9 @@ sys.path.insert(0, str(ROOT))          # so `import core` works from the repo ro
 REALISTIC = {
     "AWS_REGION": "us-east-1",
     "AWS_DEFAULT_REGION": "us-east-1",
-    "DATABASE_URL": "postgresql://placeholder:placeholder@localhost:5432/placeholder",
+    # no user:password in this one — the secret scanner rightly flags that shape,
+    # and a placeholder is not worth teaching the gate to ignore.
+    "DATABASE_URL": "postgresql://localhost:5432/placeholder",
     "LANGSMITH_TRACING": "false",
 }
 
@@ -46,7 +48,9 @@ REQUIRED = re.compile(r"""os\.environ\[\s*['"]([A-Z0-9_]+)['"]\s*\]""")
 def required_variables():
     """Every name the application demands outright, read from the source."""
     names = set()
-    for path in ROOT.glob("*.py"):                 # the app; experiments are not tested
+    # The application only. pipeline/, evals/ and experiments/ are not imported by
+    # any test, so a variable only they require is not a variable a test needs.
+    for path in sorted(ROOT.glob("backend/*.py")) + sorted(ROOT.glob("*.py")):
         names |= set(REQUIRED.findall(path.read_text(encoding="utf-8")))
     return names
 

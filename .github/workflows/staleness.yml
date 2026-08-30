@@ -7,7 +7,7 @@
 # CHANGES when the outside world does. Only the calendar knows.
 #
 # So this runs on a schedule instead of on a change, reads the date stamped in
-# providers.py, and opens an issue when it is too old. It is the smallest possible
+# backend/providers.py, and opens an issue when it is too old. It is the smallest possible
 # version of drift detection, and it needs no model and no API key.
 #
 # ON THE TOKEN: GITHUB_TOKEN is not a secret you store. GitHub mints one per run,
@@ -41,7 +41,7 @@ jobs:
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import datetime, re
-          source = open("providers.py", encoding="utf-8").read()
+          source = open("backend/providers.py", encoding="utf-8").read()
           checked = re.search(r"PRICES_CHECKED_ON\s*=\s*date\((\d+),\s*(\d+),\s*(\d+)\)", source)
           limit = re.search(r"STALE_AFTER_DAYS\s*=\s*(\d+)", source)
           on = datetime.date(*map(int, checked.groups()))
@@ -81,7 +81,7 @@ jobs:
           is now out of date.
 
           To clear this:
-          1. Re-check the prices in \`providers.py\` against their recorded sources.
+          1. Re-check the prices in \`backend/providers.py\` against their recorded sources.
           2. Update \`PRICES_CHECKED_ON\`.
           3. Mark anything you cannot confirm from an official page as \`verified=False\`
              rather than guessing.

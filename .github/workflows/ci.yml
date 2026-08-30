@@ -46,10 +46,13 @@ jobs:
         with:
           python-version: '3.13'
 
-      # repo_check.py imports nothing outside the standard library, on purpose.
+      # scripts/repo_check.py imports nothing outside the standard library, on purpose.
       # A gate that needs a dependency install can be broken BY a dependency.
       - name: Run repo_check.py
-        run: python repo_check.py
+        run: python -m scripts.repo_check
+
+      - name: Docs are rebuilt from their markdown
+        run: python -m scripts.build_docs --check
 
   # ── Job 2 · slow. Proves requirements.txt actually resolves. ──────────────
   dependencies:

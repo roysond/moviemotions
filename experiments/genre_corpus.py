@@ -50,7 +50,8 @@ import sys
 import psycopg
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core import DATABASE_URL, DIMENSIONS, MODEL_ID, embed  # noqa: E402
+from backend.config import DATABASE_URL, DIMENSIONS, MODEL_ID
+from backend.models import embed  # noqa: E402
 
 SOURCE_FIELD = "genre"
 CHUNK_INDEX = 900          # deliberately out of the way of real chunks (plot uses 2..~12)

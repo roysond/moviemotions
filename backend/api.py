@@ -24,7 +24,7 @@ THE INTERESTING PART — a pause that survives an HTTP request
     in a Postgres saver is the only change needed to survive one.
 
 RUN
-    uvicorn api:app --reload --port 8000     then open http://127.0.0.1:8000
+    uvicorn backend.api:app --reload --port 8000     then open http://127.0.0.1:8000
 """
 
 import json
@@ -37,9 +37,10 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from agent import AGENT_MODEL, MAX_PASSES, graph, split_content
-import providers
-from core import availability, graph_film_titles, search
+from backend.agent import AGENT_MODEL, MAX_PASSES, graph, split_content
+from backend import providers
+from backend.graph import availability, graph_film_titles
+from backend.retrieval import search
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title="MovieMotions")

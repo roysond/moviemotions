@@ -47,7 +47,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 
-from tools import TOOLS
+from backend.tools import TOOLS
 
 load_dotenv()
 

@@ -1,10 +1,20 @@
 """Store derived moods and themes as a second chunk per film, embedded."""
 
+import os
+import sys
+
+# Run either way: `python -m pipeline.build_graph` from the repo root, or
+# `python pipeline/build_graph.py`. The second puts this file's OWN folder on the
+# path, not the repo root, so `backend` would not be importable without this line.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 import json
 
 import psycopg
 
-from core import DATABASE_URL, DIMENSIONS, MODEL_ID, embed
+from backend.config import DATABASE_URL, DIMENSIONS, MODEL_ID
+from backend.models import embed
 
 INSERT_CHUNK = """
 INSERT INTO chunks (movie_id, chunk_index, source_field, content)

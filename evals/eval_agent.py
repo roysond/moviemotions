@@ -34,7 +34,7 @@ THE JUDGE
     If ragas is missing or broken this script still runs and reports the two exact metrics.
 
 USAGE
-    python eval_agent.py
+    python -m evals.eval_agent
 """
 
 import asyncio
@@ -46,8 +46,8 @@ import psycopg
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent import auto_approve, converse, split_content  # noqa: E402
-from core import DATABASE_URL  # noqa: E402
+from backend.agent import auto_approve, converse, split_content  # noqa: E402
+from backend.config import DATABASE_URL  # noqa: E402
 
 load_dotenv()
 

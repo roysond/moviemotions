@@ -26,7 +26,7 @@ query shape had none either. A different denominator is a different number — t
 0.78 to 0.72 measures the new cases, not a regression.
 
 **The noise floor is 0.06, not 0.05 — measured 29 Aug 2026.** Two runs of
-`eval_agent.py` with ZERO code changes between them scored **0.78 and 0.72**. Within the
+`evals/eval_agent.py` with ZERO code changes between them scored **0.78 and 0.72**. Within the
 second run, case 2's three draws were **0.86 / 0.33 / 0.86** — a spread of 0.53 on one
 case. Treat anything under **0.10** as unresolvable on this setup. The older 0.05 figure
 below understated it and should not be used.
@@ -58,15 +58,15 @@ agreeing on the total. Stay on `luna`; the instability is the metric, not the mo
 **Void baselines — do not compare against these.** 0.44, 0.88 and 0.92 were single draws
 judged by `google/gemini-3.5-flash-lite`. Different judge, one draw, no error bar.
 
-**Reproduce without re-running the agent:** `python eval_agent.py --rejudge` judges the
+**Reproduce without re-running the agent:** `python -m evals.eval_agent --rejudge` judges the
 frozen answers in `data/agent_transcript.json`. That is the only way to separate the
 judge's variance from the agent's.
 | graph | **600 nodes · 919 edges** | film 20 · genre 13 · keyword 323 · person 210 · **provider 34** | exact |
 
 **Availability added 29 Aug 2026.** 34 US providers, 285 `AVAILABLE_*` edges
 (rent 118 · buy 100 · flatrate 60 · ads 4 · free 3). Predicted 600/919 before the run;
-got 600/919, twice, identically. Prices live in `providers.py` with a checked-on date;
-`python providers.py` fails loudly if the graph holds a provider that file cannot price.
+got 600/919, twice, identically. Prices live in `backend/providers.py` with a checked-on date;
+`python -m backend.providers` fails loudly if the graph holds a provider that file cannot price.
 
 **RESOLVED — the critic was destroying correct answers. 29 Aug 2026.**
 `expected films` fell 8/8 → 7/8 and reproduced across three runs. A diagnostic print of
@@ -90,7 +90,7 @@ exonerated; the critic did it.
    silently. A verification step that can only delete is strictly more dangerous than one
    that can only warn.
 
-**Fix before re-enabling** (`CRITIC_ENABLED` in agent.py, currently False): judge by CLAIM
+**Fix before re-enabling** (`CRITIC_ENABLED` in backend/agent.py, currently False): judge by CLAIM
 TYPE — the agent may interpret what it was given, it may not add facts it was not given —
 operate on claims rather than lines, and send a line back for ONE rewrite instead of
 deleting it. Anything that can only delete does not go back in.
@@ -116,7 +116,7 @@ that trade is why two metrics are reported, never one.
 raises false confidence. A change that moves only one of them has not been understood yet.
 
 **Rerank scores ARE stable. The previous claim is retracted, 26 Aug 2026.** The same query run
-twice returns identical scores to four decimal places, and `eval_variants.py` has reproduced
+twice returns identical scores to four decimal places, and `evals/eval_variants.py` has reproduced
 exactly on separate days. `cohere/rerank-v3.5` has one provider on OpenRouter, so the "gateway
 routes to a different backend" explanation cannot apply to it. The claim came from a single
 genre experiment that scored 96.6% once and 86.2% twice; the cause was never established and
@@ -128,13 +128,15 @@ was attributed to the reranker on no evidence — the corpus was being modified 
 ## 2. The runner — one command each
 
 ```bash
-python repo_check.py         # structure: syntax, pins, env parity, dead refs, secrets
-python -m pytest tests -q    # the maths: damped sum, price banding, schema drift, matching
-python providers.py          # the price table, and whether the graph holds a provider it cannot price
-python eval_variants.py      # retrieval: achievable@3 and quiet@3 over data/golden_set.json
-python eval_agent.py         # the agent: tool accuracy, grounding, RAGAS faithfulness
-python build_graph.py --status   # the graph: node and edge counts by type
-cd frontend && npm run build # the front end: tsc --noEmit, then the bundle
+python -m scripts.repo_check         # structure: syntax, pins, env parity, dead refs, secrets, gitignore, local imports
+python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching
+python -m backend.providers          # the price table, and whether the graph holds a provider it cannot price
+python -m backend.tools              # the spec the model reads, then every tool called for real
+python -m evals.eval_variants        # retrieval: achievable@3 and quiet@3 over data/golden_set.json
+python -m evals.eval_agent           # the agent: tool accuracy, grounding, RAGAS faithfulness
+python -m pipeline.build_graph --status  # the graph: node and edge counts by type
+python -m scripts.build_docs --check # the docs: is the HTML rebuilt from its markdown
+cd frontend && npm run build         # the front end: tsc --noEmit, then the bundle
 ```
 
 **Reproduce CI's conditions before pushing:**
@@ -161,8 +163,8 @@ day `tests/` arrived. The honest version:
 
 > **CI checks everything that gives the same answer every time.** Syntax, pinned
 > dependencies, `.env` parity, the damped sum's arithmetic, price banding, whether
-> `build_graph.py` and `graph_schema.sql` still agree, and whether the front end still
-> compiles against `api.py`'s shape. **The evals check the rest** — anything involving a
+> `pipeline/build_graph.py` and `graph_schema.sql` still agree, and whether the front end still
+> compiles against `backend/api.py`'s shape. **The evals check the rest** — anything involving a
 > model — on a machine that already has credentials. CI still holds no keys.
 
 Four CI jobs: `structure`, `dependencies`, `tests`, `frontend`. Plus a scheduled
@@ -183,10 +185,10 @@ Every module carries `if __name__ == "__main__":` that runs it on real input and
 did, so a component can be watched working without reading its code.
 
 ```bash
-python core.py           # graph facts, then the same catalogue scored by vectors
-python tools.py          # the exact tool spec the model receives, then real calls
-python agent.py          # a full loop with the review step in the terminal
-python build_graph.py --status
+python -m backend.retrieval   # and: python -m backend.graph           # graph facts, then the same catalogue scored by vectors
+python -m backend.tools          # the exact tool spec the model receives, then real calls
+python -m backend.agent          # a full loop with the review step in the terminal
+python -m pipeline.build_graph --status
 ```
 
 ---
@@ -195,21 +197,27 @@ python build_graph.py --status
 
 | change this | re-test these |
 |---|---|
-| `core.py` | **everything.** api · tools · agent · both evals · every experiment |
-| `tools.py` | `agent.py`, `eval_agent.py`, and `api.py`'s film parser — it reads the tool's prose |
-| `agent.py` | `api.py`, `eval_agent.py` |
-| `api.py` | `static/index.html` only |
-| `build_graph.py` / `graph_schema.sql` | `core.graph_find`, `tools.find_films_by_fact`, `eval_agent.py` |
-| `repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
-| `providers.py` | `core.availability`, `tools.check_availability`, `api.py`'s panel, `tests/test_providers.py`. It also owns `REGION`, so `build_graph.py` too |
-| `agent.py`'s graph wiring | **run the agent, not just the tests.** `python agent.py`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
-| `api.py` | `frontend/src/types.ts` — they are a contract. `npm run build` is what enforces it |
+| `backend/config.py` | **everything** — every module reads its settings from here |
+| `backend/models.py` | `backend/retrieval.py` and both evals. It is the only file that names a vendor, so a change here is a change of supplier |
+| `backend/retrieval.py` | `backend/tools.py`, `backend/api.py`, `evals/eval_variants.py`, `evals/eval_agent.py`, `search.py`, most experiments |
+| `backend/graph.py` | `backend/tools.py`, `backend/api.py`'s panel, `evals/eval_agent.py` |
+| `backend/tools.py` | `backend/agent.py`, `evals/eval_agent.py`, and `backend/api.py`'s film parser — it reads the tool's prose |
+| `backend/agent.py` | `backend/api.py`, `evals/eval_agent.py` |
+| `backend/api.py` | `static/index.html` only |
+| `pipeline/build_graph.py` / `graph_schema.sql` | `backend/graph.py`, `backend/tools.py`'s `find_films_by_fact`, `evals/eval_agent.py`, `tests/test_schema_drift.py` |
+| `scripts/repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
+| any markdown in `docs/` or `README.md` | `python -m scripts.build_docs`. The HTML is DERIVED; CI fails the PR if it was not rebuilt |
+| moving ANY file | `python -m scripts.repo_check`, `python -m scripts.build_docs --check`, `python -m pytest tests -q`, then actually run the app **and rebuild the front end**. A move breaks imports, and imports fail at run time, not at parse time — including imports written *inside* a function, which no top-of-file rewrite will ever see |
+| `backend/providers.py` | `backend/graph.py`'s `availability`, `backend/tools.py`'s `check_availability`, `backend/api.py`'s panel, `tests/test_providers.py`. It also owns `REGION`, so `pipeline/build_graph.py` too |
+| `backend/agent.py`'s graph wiring | **run the agent, not just the tests.** `python -m backend.agent`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
+| `backend/api.py` | `frontend/src/types.ts` — they are a contract. `npm run build` is what enforces it |
 | `frontend/src/*` | `npm run build` (typecheck + bundle), then look at it in a browser |
+| any tool docstring | `python -m backend.tools` — it prints the spec the model actually receives. Two instructions in one docstring can contradict each other, and only reading it whole catches that |
 | a job's `name:` in `.github/workflows/ci.yml` | **the branch ruleset on GitHub.** It requires check names as plain strings, so renaming a job leaves the ruleset waiting forever for a check that no longer exists — no red cross, no error, just a PR stuck on "Expected". Rename both in the same sitting |
-| `data/golden_set.json` | `eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
-| the corpus (`derive_corpus.py`, `chunk_plots.py`) | re-embed, then **both** evals |
+| `data/golden_set.json` | `evals/eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
+| the corpus (`pipeline/derive_corpus.py`, `pipeline/chunk_plots.py`) | re-embed, then **both** evals |
 
-**The trap in this table:** `api.py` parses `tools.py`'s plain-text output with a regular
+**The trap in this table:** `backend/api.py` parses `backend/tools.py`'s plain-text output with a regular
 expression. Change the tool's wording and the web UI silently stops showing scores — no error,
 no crash, just an empty panel. Nothing in the type system connects those two files.
 
@@ -287,6 +295,6 @@ an improvement. To get a verdict you would need more judged cases, not more runs
   feels — this is emotional-density matching, not mood matching.
 - **Case 22 scores 0.400 on a no-answer query**, which falls inside the "recommend it
   plainly" band. False confidence, distinct from the mood problem.
-- **CI covers structure only, by design.** `.github/workflows/ci.yml` runs `repo_check.py` and a
+- **CI covers structure only, by design.** `.github/workflows/ci.yml` runs `scripts/repo_check.py` and a
   clean dependency install on every pull request. It holds no credentials, so it cannot run the
   evals — those stay manual, on a machine that has the keys.

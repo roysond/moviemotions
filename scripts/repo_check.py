@@ -16,7 +16,7 @@ WHAT IT CANNOT CHECK, AND WHY THAT IS FINE
     them. So this checks STRUCTURE, and the evals check BEHAVIOUR on your machine.
     Two different jobs. Do not try to make this one do the other.
 
-    python repo_check.py           # human-readable, exits non-zero on failure
+    python -m scripts.repo_check           # human-readable, exits non-zero on failure
 """
 
 import ast
@@ -25,7 +25,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+# This file lives in scripts/, so the repository root is one level up. Every check
+# below uses paths relative to the root, so chdir there once and stop thinking about it.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 
 failures, warnings = [], []
@@ -46,7 +48,10 @@ def warn(check, detail):
 
 
 def py_files():
-    return sorted(glob.glob("*.py")) + sorted(glob.glob("experiments/*.py"))
+    # Every folder that holds Python. Listed explicitly rather than walked, so a new
+    # top-level folder is a deliberate decision and not something that appears by accident.
+    folders = ["", "backend/", "pipeline/", "evals/", "scripts/", "tests/", "experiments/"]
+    return sorted(f for folder in folders for f in glob.glob(folder + "*.py"))
 
 
 # ── 1 · every module parses ────────────────────────────────────────────────
@@ -62,7 +67,11 @@ def check_syntax():
 # ── 2 · every third-party import is pinned ─────────────────────────────────
 # Distribution names use hyphens, import names use underscores. Comparing the two
 # naively produced a false positive during the manual review; normalise both.
-LOCAL = {os.path.splitext(os.path.basename(p))[0] for p in py_files()}
+# Local modules AND local packages. `import backend.retrieval` names a folder, not a
+# file, so a stem-only set reported the whole application as an undeclared dependency.
+LOCAL = ({os.path.splitext(os.path.basename(p))[0] for p in py_files()}
+         | {d for d in os.listdir(".")
+            if os.path.isfile(os.path.join(d, "__init__.py"))})
 
 
 def check_requirements():
@@ -123,7 +132,12 @@ REFERENCE = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|md|sql|html|json|txt|yml|yaml
 
 
 def check_doc_references():
-    docs = ["README.md"] + sorted(glob.glob("docs/*.md"))
+    # A dated log legitimately names files that have since moved or gone: on 30 Aug the
+    # repository was reorganised, and rewriting old entries to match would falsify the
+    # record. Documents that describe the CURRENT system are still checked strictly.
+    HISTORICAL = {"docs/session-notes.md"}
+    docs = [d for d in ["README.md"] + sorted(glob.glob("docs/*.md"))
+            if d not in HISTORICAL]
     for doc in docs:
         if not os.path.exists(doc):
             continue
@@ -163,7 +177,9 @@ def is_placeholder(match):
     return any(p.strip("<>{}[]").lower() in PLACEHOLDERS or p.startswith(("<", "{", "$"))
                for p in parts)
 SCAN_GLOBS = ["*.py", "*.md", "*.sql", "*.txt", "*.yml", "*.html",
-              "docs/*.md", "docs/*.html", "experiments/*.py", ".env.example"]
+              "docs/*.md", "docs/*.html", "backend/*.py", "pipeline/*.py",
+              "evals/*.py", "scripts/*.py", "tests/*.py", "experiments/*.py",
+              ".env.example"]
 
 
 def check_no_secrets():
@@ -200,6 +216,98 @@ def check_gitignore():
                      f"add '!{path}' or the schema never ships")
 
 
+
+# ── 7 · every import of OUR OWN code resolves to something that exists ─────
+# The hole this closes, found the hard way on 30 Aug. Check 2 excuses any import whose
+# name matches a .py file ANYWHERE in the tree, so after the reorganisation moved
+# build_graph.py into pipeline/, the three surviving `import build_graph` lines in
+# tests/test_schema_drift.py were read as "local, therefore fine" — by the very check
+# written to prove the move was safe. Structure was declared clean; pytest then failed
+# three times with ModuleNotFoundError.
+#
+# A static check that says "safe" about an import Python cannot perform is worse than
+# no check at all, because it is believed. This one asks the only question that matters:
+# from the repository root, is there a folder or a file at that path?
+PACKAGES = {d for d in os.listdir(".")
+            if os.path.isfile(os.path.join(d, "__init__.py"))}
+# What `import X` can actually find when run from the root: a package folder, or a
+# module file sitting AT the root. Nothing nested — that is the whole point.
+IMPORTABLE = PACKAGES | {os.path.splitext(f)[0] for f in glob.glob("*.py")}
+
+
+def resolves(dotted):
+    """Is there a real package folder or module file at this dotted path?"""
+    if dotted.split(".")[0] not in IMPORTABLE:
+        return False
+    path = os.path.join(*dotted.split("."))
+    return os.path.isdir(path) or os.path.isfile(path + ".py")
+
+
+def exported_by(folder, name):
+    """Does folder/__init__.py bind this name? Used only when it is not a submodule."""
+    init = os.path.join(folder, "__init__.py")
+    if not os.path.isfile(init):
+        return True                       # namespace package — cannot tell, do not guess
+    try:
+        tree = ast.parse(open(init, encoding="utf-8").read(), filename=init)
+    except SyntaxError:
+        return True                       # check 1 already reported this file
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == name:
+                return True
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            if any((a.asname or a.name.split(".")[0]) == name for a in node.names):
+                return True
+        elif isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+                return True
+    return False
+
+
+def check_local_imports():
+    for path in py_files():
+        if path in unparseable:
+            continue                      # already reported by the syntax check
+        tree = ast.parse(open(path, encoding="utf-8").read(), filename=path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules = [node.module]
+            else:
+                continue                  # relative imports resolve by position, not name
+            for module in modules:
+                head = module.split(".")[0]
+                if head in sys.stdlib_module_names or head not in LOCAL:
+                    continue              # stdlib, or third party — check 2 owns those
+                if not resolves(module):
+                    fail("imports",
+                         f"{path}:{node.lineno} imports '{module}' — no such module at "
+                         f"the repository root. A file of that name exists somewhere in "
+                         f"the tree, which is why check 2 let it through.")
+                    continue
+                # `from <package> import name` — the name must be a submodule of that
+                # package, or something its __init__.py actually binds.
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                folder = os.path.join(*module.split("."))
+                if not os.path.isdir(folder):
+                    continue              # importing names out of a module file: runtime's job
+                for alias in node.names:
+                    if alias.name == "*":
+                        continue
+                    inside = os.path.join(folder, alias.name)
+                    if os.path.isfile(inside + ".py") or os.path.isdir(inside):
+                        continue
+                    if exported_by(folder, alias.name):
+                        continue
+                    fail("imports",
+                         f"{path}:{node.lineno} imports '{alias.name}' from "
+                         f"'{module}', which contains no such module and exports no "
+                         f"such name")
+
+
 CHECKS = [
     ("syntax", check_syntax),
     ("requirements", check_requirements),
@@ -207,6 +315,7 @@ CHECKS = [
     ("docs", check_doc_references),
     ("secrets", check_no_secrets),
     ("gitignore", check_gitignore),
+    ("imports", check_local_imports),
 ]
 
 if __name__ == "__main__":

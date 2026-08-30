@@ -70,6 +70,15 @@ COST NOTE
     unchanged, so only the final chunk embeddings are re-computed.
 """
 
+import os
+import sys
+
+# Run either way: `python -m pipeline.build_graph` from the repo root, or
+# `python pipeline/build_graph.py`. The second puts this file's OWN folder on the
+# path, not the repo root, so `backend` would not be importable without this line.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 import glob
 import hashlib
 import json
@@ -80,7 +89,8 @@ import time
 
 import psycopg
 
-from core import DATABASE_URL, DIMENSIONS, MODEL_ID, embed
+from backend.config import DATABASE_URL, DIMENSIONS, MODEL_ID
+from backend.models import embed
 
 MAX_CHARS = 900              # cap on a chunk's OWN content; overlap may add to this
 MIN_CHARS = 250              # below this a chunk is thin — merge forward if it fits

@@ -28,8 +28,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import SYSTEM_PROMPT  # noqa: E402  — the real prompt, not a toy one
-from tools import TOOLS          # noqa: E402  — all three, with full descriptions
+from backend.agent import SYSTEM_PROMPT  # noqa: E402  — the real prompt, not a toy one
+from backend.tools import TOOLS          # noqa: E402  — all three, with full descriptions
 
 load_dotenv()
 REGION = os.environ["AWS_REGION"]
@@ -103,7 +103,7 @@ print()
 if usable:
     print("Swap the agent model with ONE of these, nothing else changed:")
     for model_id in usable:
-        print(f"    BEDROCK_MODEL_AGENT={model_id} python eval_agent.py")
+        print(f"    BEDROCK_MODEL_AGENT={model_id} python -m evals.eval_agent")
     print("\nUSABLE means it survived the real prompt with the real tools. It does NOT")
     print("mean it is better — measure that with eval_agent.py, against the baseline.")
 else:
