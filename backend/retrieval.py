@@ -46,6 +46,32 @@ FROM (
       AND (%(exclude_title)s::text IS NULL
            OR NOT (lower(m.title) = lower(%(exclude_title)s::text)
                    OR lower(m.title) LIKE lower(%(exclude_loose)s::text)))
+      -- GRAPH FACTS AS A GATE. Genre, cast and crew are not columns on `movies` — a film
+      -- has MANY of each, so they live as edges. That is the only reason they were not
+      -- filters until now: the columns were easy and the edges needed a join. An EXISTS
+      -- is that join, and it belongs in exactly the same place as the runtime checks
+      -- above — inside the inner SELECT, so ROW_NUMBER() budgets its 30/10 quota over
+      -- eligible films only. Filter, then budget, then rank.
+      AND (%(genre_key)s::text IS NULL OR EXISTS (
+             SELECT 1 FROM graph_edges ge
+             JOIN graph_nodes gf ON gf.node_key = ge.from_key
+             WHERE ge.edge_type = 'HAS_GENRE'
+               AND ge.to_key = %(genre_key)s::text
+               AND (gf.properties->>'movie_id')::int = m.movie_id))
+      AND (%(actor)s::text IS NULL OR EXISTS (
+             SELECT 1 FROM graph_edges ge
+             JOIN graph_nodes gp ON gp.node_key = ge.from_key
+             JOIN graph_nodes gf ON gf.node_key = ge.to_key
+             WHERE ge.edge_type = 'ACTED_IN'
+               AND lower(gp.name) LIKE lower(%(actor_loose)s::text)
+               AND (gf.properties->>'movie_id')::int = m.movie_id))
+      AND (%(director)s::text IS NULL OR EXISTS (
+             SELECT 1 FROM graph_edges ge
+             JOIN graph_nodes gp ON gp.node_key = ge.from_key
+             JOIN graph_nodes gf ON gf.node_key = ge.to_key
+             WHERE ge.edge_type = 'DIRECTED'
+               AND lower(gp.name) LIKE lower(%(director_loose)s::text)
+               AND (gf.properties->>'movie_id')::int = m.movie_id))
       -- CORPUS DIAL. NULL = every source type allowed, which is normal operation.
       -- Passing a list restricts the pool. This is an INSTRUMENT, not a feature: it is how
       -- we measure what each corpus is worth — run the golden set with one source type
@@ -149,7 +175,7 @@ def _collapse_to_films(chunks, limit, pool=3):
 def search(query, limit=3, use_rerank=True, plot_k=30, other_k=10,
            variant="context_header", header_at_rerank=False, query_vector=None,
            max_runtime=None, min_runtime=None, after_year=None, before_year=None,
-           exclude_title=None, sources=None):
+           exclude_title=None, genre_key=None, actor=None, director=None, sources=None):
     """Retrieve chunks wide -> rerank -> aggregate per film -> collapse to films.
 
     DEFAULTS ARE ARM D, CHOSEN BY MEASUREMENT (eval_variants.py, 25-query golden set):
@@ -202,6 +228,11 @@ def search(query, limit=3, use_rerank=True, plot_k=30, other_k=10,
             "after_year": after_year, "before_year": before_year,
             "exclude_title": exclude_title,
             "exclude_loose": f"%{exclude_title}%" if exclude_title else None,
+            "genre_key": genre_key,
+            "actor": actor,
+            "actor_loose": f"%{actor}%" if actor else None,
+            "director": director,
+            "director_loose": f"%{director}%" if director else None,
             "sources": sources,
         }).fetchall()
 
