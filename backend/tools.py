@@ -30,15 +30,125 @@ TWO KINDS OF ARGUMENT, AND THE WHOLE DESIGN IS IN THE SPLIT
     Never ask the fuzzy machine a question the exact machine can answer.
 """
 
+import re
 from typing import Optional
 
 from langchain_core.tools import tool
 
 from backend import providers
-from backend.graph import availability, graph_find
+from backend.graph import availability, graph_find, graph_film_titles
+from backend.models import embed
 from backend.retrieval import excluded_by_filters, get_film, search
 
 MAX_RESULTS = 5
+
+
+def names_a_real_film(wanted, titles):
+    """Would excluding this string remove anything at all?
+
+    Deliberately the SAME rule the SQL uses — a real title CONTAINS the string given,
+    so "Terminator 2" covers "Terminator 2: Judgment Day". If nothing contains it, the
+    exclusion cannot touch a single row, and an argument that cannot change the result
+    is not a filter; it is a claim about the world that nobody checked.
+
+    Pure on purpose: the database call stays outside, so this can be tested against a
+    handful of made-up titles with no credentials and no Postgres.
+    """
+    wanted = (wanted or "").strip().lower()
+    return bool(wanted) and any(wanted in title.lower() for title in titles)
+
+
+
+# ── the constraints, in the order they may be given up ────────────────────────
+# Not all constraints are equal, and treating them as one flat AND is what makes an
+# empty result useless. "A horror comedy under 90 minutes" is a REQUEST for a horror
+# comedy with a CONVENIENCE attached. If nothing satisfies both, the honest reply is
+# not "nothing found" — it is "there are horror comedies here, they all run longer,
+# shall I show them anyway?"
+#
+# So: length is surrendered first, then dates. Genre, cast and crew are never
+# surrendered — they are what was actually asked for. Give those up and the answer is
+# about a different film than the one requested.
+DROPPABLE = [
+    (("max_runtime", "min_runtime"), "the length limit"),
+    (("after_year", "before_year"), "the year range"),
+]
+KEPT = ("genre", "actor", "director")
+
+
+def genre_key(name):
+    """'Science Fiction' -> 'genre:science-fiction'. Must match pipeline/build_graph.py."""
+    return "genre:" + re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
+
+
+def relaxation_steps(asked):
+    """Which constraints could be given up, in order, given what was actually sent.
+
+    Returns a list of (keys_to_drop, plain_english_label), cumulative — step two also
+    drops step one. Pure: no database, so the precedence can be tested on a dict.
+    """
+    steps, dropping = [], []
+    for keys, label in DROPPABLE:
+        present = [k for k in keys if asked.get(k) is not None]
+        if not present:
+            continue
+        dropping = dropping + present
+        steps.append((tuple(dropping), label))
+    return steps
+
+
+def kept_description(asked):
+    """'genre=Horror, director=Jordan Peele' -> the words to say it back to the user."""
+    parts = [f"{k}={asked[k]}" for k in KEPT if asked.get(k) is not None]
+    return ", ".join(parts)
+
+
+
+def search_kwargs(active):
+    """Turn this tool's filter names into the ones `search()` actually accepts.
+
+    Only one name changes: the tool takes a human genre ("Science Fiction"), the SQL
+    takes its graph key ("genre:science-fiction"). Everything else passes straight
+    through.
+
+    A separate function, not three lines inside the tool, for one reason: the first
+    version popped 'genre' only when it had a value, so an unset genre stayed in the
+    dict and `search()` rejected the keyword it had never heard of. Every call failed.
+    Pure and named, it can be checked against the real signature by a test.
+    """
+    args = dict(active)
+    raw = args.pop("genre", None)
+    args["genre_key"] = genre_key(raw) if raw else None
+    return args
+
+
+
+def relaxation_message(label, kept, titles, capped):
+    """What to say when giving up one constraint would find something.
+
+    Two things this has to get right, both learned the hard way:
+
+    COUNT vs CAP. The search returns at most MAX_RESULTS, so a list of that length is a
+    FLOOR, not a total. "2 horror films" was true; "5 films" meant "five is where the
+    list stopped", and the same sentence shape said both.
+
+    NAMING vs RECOMMENDING. Titles are only worth listing when something was KEPT — a
+    genre, an actor, a director. With nothing kept, the relaxed search is the whole
+    catalogue in score order, and naming five of them presents an arbitrary slice as an
+    answer.
+    """
+    if not kept:
+        return (f"Nothing satisfies everything asked for, and {label} is the only thing "
+                f"ruling films out — the catalogue has films, none inside that limit. Tell "
+                f"the user exactly that and ASK whether to ignore it. Name no films yet: "
+                f"with nothing else asked for, any list here is just the catalogue, and "
+                f"reading it out would sound like a recommendation.")
+    how_many = f"at least {len(titles)}" if capped else f"{len(titles)}"
+    return (f"Nothing satisfies everything asked for. {label.capitalize()} is the blocker: "
+            f"without it there are {how_many} film(s) matching {kept} — "
+            f"{', '.join(titles)}.\n"
+            f"DO NOT recommend them yet. Tell the user those films exist, that they fail "
+            f"{label}, and ASK whether to ignore it. Only search again if they say yes.")
 
 
 @tool
@@ -49,6 +159,9 @@ def search_films(
     after_year: Optional[int] = None,
     before_year: Optional[int] = None,
     exclude_title: Optional[str] = None,
+    genre: Optional[str] = None,
+    actor: Optional[str] = None,
+    director: Optional[str] = None,
 ) -> str:
     """Find films whose plot, mood or situation matches a natural-language description.
 
@@ -95,9 +208,35 @@ def search_films(
         CURRENT message says nothing about length, send no length.
     after_year / before_year: four-digit years, inclusive. "something modern" or
         "from the 90s" -> after_year=1990, before_year=1999. Leave out if not asked.
-    exclude_title: a film to keep OUT of the results. Set it whenever the user says
-        "like <film>", "similar to <film>", or "another <film>" — they already know
-        that one and are asking to move past it.
+    exclude_title: a film to keep OUT of the results, and ONLY ever a real film's
+        title. Set it when the user names a film they already know — "like Jurassic
+        Park", "similar to Alien", "another Terminator" — and wants to move past it.
+
+        THE WORD "LIKE" IS NOT THE TEST. What follows it usually is not a film.
+        "something like a bachelor's night out with rave parties" describes an
+        EVENING, not a movie; sending exclude_title="A Bachelor's Night Out" invents
+        a film that does not exist, and every sentence built on it is a sentence
+        about nothing. If you are not sure the words name a real film, leave this
+        out — an unset filter costs nothing, an invented one costs the truth.
+        The tool checks, and will tell you when you were wrong.
+
+    genre / actor / director: FACTS, checked in the knowledge graph before ranking.
+        Set them ONLY when the user names them. "show me a horror film" -> genre="Horror".
+        "something scary and lonely" -> genre=None; scary is a feeling, and a feeling
+        belongs in the query where the ranker can weigh it. Inferring a genre from a mood
+        and then enforcing it deletes the right answer before it can be scored.
+        genre must be one of the thirteen listed in `find_films_by_fact`, exactly.
+
+        These NARROW the pool before anything is ranked, which is their point and their
+        danger. Use them with a mood in `query` — "a horror film that feels lonely" is
+        genre + query together. If there is no mood at all, this is the wrong tool:
+        `find_films_by_fact` answers pure-fact questions without pretending to rank.
+
+    WHEN NOTHING SATISFIES EVERYTHING. The tool works out which constraint is to blame
+    and tells you. A length or year limit is a convenience and may be given up; a genre,
+    an actor or a director is the request itself and never is. When the tool says films
+    exist but fail one limit, ASK the user before showing them — do not decide for them
+    that the limit did not matter.
 
     "SOMETHING LIKE <FILM>, BUT ..." — read this before writing the query.
     Describe what the film IS LIKE TO WATCH, not what it contains. A film's subject
@@ -126,9 +265,13 @@ def search_films(
     never re-check or apologise for them, and never mention a film the tool did not
     return just because you believe it would fit.
 
-    This tool has no genre, cast or director filter. If the user names a GENRE, an
-    ACTOR or a DIRECTOR, that is `find_films_by_fact`, not this — those are facts with
-    exact answers and this tool can only guess at them.
+    THE BOUNDARY WITH `find_films_by_fact`, now that both take a genre, an actor and a
+    director. It is not WHICH words appeared — it is whether a MOOD appeared with them.
+        "a horror film that feels lonely"  -> this tool, genre="Horror" + the mood
+        "show me a horror film"            -> find_films_by_fact. Nothing to rank.
+        "a tense Nolan film"               -> this tool, director + the mood
+        "anything by Nolan"                -> find_films_by_fact. Nothing to rank.
+    A ranked list with no mood to rank by is a list in arbitrary order wearing scores.
 
     Each result carries the QUOTED TEXT that matched. Base everything you say about a
     film on that quote. If the quote does not support a claim, do not make the claim —
@@ -146,7 +289,23 @@ def search_films(
     A steep drop after the first result (e.g. 0.58 then 0.19) means only the
     first one is real.
     """
+    # IS THAT EVEN A FILM? The catalogue is a table, and "does this title exist in it"
+    # has one right answer — so it is not a question to leave with the model. On 30 Aug
+    # the phrase "something LIKE a bachelor's night out" produced
+    # exclude_title="A Bachelor's Night Out", and the answer was then written around
+    # excluding a film that has never existed. The argument itself was harmless: the SQL
+    # matched nothing. The sentence it caused was not.
+    #
+    # The test mirrors the SQL exactly — the exclusion fires when a real title CONTAINS
+    # the string given ("Terminator 2" excludes "Terminator 2: Judgment Day"). If no
+    # title contains it, the argument cannot affect one single row, which is the precise
+    # definition of meaningless. Drop it and say so, out loud, in the result.
+    unknown_exclusion = None
+    if exclude_title and not names_a_real_film(exclude_title, graph_film_titles()):
+        unknown_exclusion, exclude_title = exclude_title, None
+
     filters = {
+        "genre": genre, "actor": actor, "director": director,
         "max_runtime": max_runtime, "min_runtime": min_runtime,
         "after_year": after_year, "before_year": before_year,
         # Was declared in the signature and the docstring, enforced in SQL, and NOT
@@ -156,12 +315,43 @@ def search_films(
         "exclude_title": exclude_title,
     }
     asked = {k: v for k, v in filters.items() if v is not None}
-    films = search(query, limit=MAX_RESULTS, **filters)
+
+    def run(active):
+        return search(query, limit=MAX_RESULTS, query_vector=vector,
+                      **search_kwargs(active))
+
+    # Embedded ONCE, up here, because an empty result is retried with fewer filters and
+    # the vector does not change between those attempts. Re-embedding per attempt would
+    # pay Bedrock three times for the same sentence.
+    vector = str(embed(query))
+    films = run(filters)
 
     if not films:
         # A filter emptying the pool and a description matching nothing are DIFFERENT
         # failures and need different replies, so the tool result says which one happened.
+        # The invented-title note has to appear on THIS path as well: an empty result is
+        # exactly when the model reaches for a reason, and "I excluded X" is the wrong one.
+        if unknown_exclusion:
+            return (f'exclude_title="{unknown_exclusion}" is NOT a film in this catalogue '
+                    f'and was ignored — those words were a description, not a title, and '
+                    f'the user named no film. Nothing then matched the description either. '
+                    f'Say that plainly and do not mention the excluded title at all.')
         if asked:
+            # Which constraint is actually blocking? Give up the droppable ones in
+            # order and stop at the first attempt that finds something. That answer —
+            # "these exist, but they fail X" — is worth three cheap queries.
+            for dropping, label in relaxation_steps(asked):
+                relaxed = {k: (None if k in dropping else v) for k, v in filters.items()}
+                found = run(relaxed)
+                if found:
+                    return relaxation_message(
+                        label, kept_description(asked),
+                        [f["title"] for f in found], capped=len(found) >= MAX_RESULTS)
+            kept = kept_description(asked)
+            if kept:
+                return (f"No film in this catalogue matches {kept} at all — not one, before "
+                        f"any other limit was applied. Say that plainly. Do not offer to "
+                        f"relax the length or the year, because they are not the problem.")
             return ("No films at all satisfy those hard constraints "
                     f"({', '.join(f'{k}={v}' for k, v in asked.items())}). "
                     "The limits ruled everything out, not the description — tell the user "
@@ -169,6 +359,12 @@ def search_films(
         return "No films found."
 
     lines = []
+    if unknown_exclusion:
+        lines.append(
+            f'exclude_title="{unknown_exclusion}" is NOT a film in this catalogue, so it '
+            f'was ignored. Those words were a description in the user\'s message, not a '
+            f'title — the user never named a film. Do not mention it, do not apologise '
+            f'for it, and do not present it as something that was excluded.')
     if asked:
         lines.append("filters enforced: " + ", ".join(f"{k}={v}" for k, v in asked.items()))
 
@@ -240,8 +436,10 @@ def find_films_by_fact(
     """Look films up by FACT — who made them, who is in them, what genre they are, or
     what else is like a named film. Exact database lookup, no scores, no guessing.
 
-    Use this whenever the user names a PERSON, a GENRE, or an existing film to be
-    compared against:
+    Use this when the user names a PERSON, a GENRE, or an existing film AND says nothing
+    about how they want to feel. The moment a mood is attached — "a horror film that
+    feels lonely", "a tense Nolan film" — it is `search_films`, which takes the same
+    genre/actor/director arguments AND has something to rank with. Facts alone come here:
         "anything by Christopher Nolan"        -> director="Christopher Nolan"
         "films with Arnold Schwarzenegger"     -> actor="Arnold Schwarzenegger"
         "show me a horror film"                -> genre="Horror"
@@ -414,6 +612,21 @@ if __name__ == "__main__":
         {"query": "a father and son separated and trying to find each other"},
         {"query": "tense, creatures hunting people", "max_runtime": 120},
         {"query": "anything at all", "max_runtime": 30},          # filter empties the pool
+        # The 30 Aug hallucination, reproduced on purpose. The tool must drop the
+        # invented title and SAY it dropped it — a silent drop teaches the model nothing.
+        {"query": "a wild, fun adventure with rave parties and madness",
+         "exclude_title": "A Bachelor's Night Out"},
+        # And the guard must not over-reject: a real title, shortened, still excludes.
+        {"query": "a tense film where people are hunted by something dangerous",
+         "exclude_title": "Terminator 2"},
+        # GRAPH GATE. The pool is narrowed by an edge before anything is ranked.
+        {"query": "a frightening film about being trapped somewhere", "genre": "Horror"},
+        {"query": "a tense, clever film", "director": "Christopher Nolan"},
+        # PRECEDENCE. Both horror films here run over 90 minutes, so this must NOT say
+        # "nothing found" — it must name the length as the blocker and offer the trade.
+        {"query": "something frightening", "genre": "Horror", "max_runtime": 90},
+        # And a genre nothing has: the length is not the problem, so do not offer it.
+        {"query": "anything at all", "genre": "Western"},
     ]
     for kwargs in probes:
         print(f"\ncall: search_films({kwargs})")

@@ -219,6 +219,8 @@ python -m pipeline.build_graph --status
 | `backend/agent.py`'s graph wiring | **run the agent, not just the tests.** `python -m backend.agent`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
 | `backend/api.py` | `frontend/src/types.ts` — they are a contract. `npm run build` is what enforces it |
 | `frontend/src/*` | `npm run build` (typecheck + bundle), then look at it in a browser |
+| `backend/tools.py`'s `names_a_real_film` | `tests/test_exclusions.py`, and the SQL in `backend/retrieval.py` — the rule must stay identical to the `LIKE` the exclusion actually runs, or the tool reports one thing and does another |
+| `SEARCH_SQL`'s graph gates / `relaxation_steps` | `tests/test_exclusions.py`, and `python -m backend.tools` — the EXISTS clauses need a live graph, so no unit test can prove them; only the self-test can |
 | any tool docstring | `python -m backend.tools` — it prints the spec the model actually receives. Two instructions in one docstring can contradict each other, and only reading it whole catches that |
 | a job's `name:` in `.github/workflows/ci.yml` | **the branch ruleset on GitHub.** It requires check names as plain strings, so renaming a job leaves the ruleset waiting forever for a check that no longer exists — no red cross, no error, just a PR stuck on "Expected". Rename both in the same sitting |
 | `data/golden_set.json` | `evals/eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
