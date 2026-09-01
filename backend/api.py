@@ -139,6 +139,31 @@ class Resume(BaseModel):
 
 @app.get("/")
 def index():
+    """The React build — the front door.
+
+    static/app/ is BUILD OUTPUT: derived, gitignored, absent from a fresh clone.
+    A missing build is a normal state with an obvious remedy, so say the remedy
+    rather than raising a bare 500 that explains nothing.
+    """
+    page = os.path.join(STATIC, "app", "index.html")
+    if not os.path.exists(page):
+        return PlainTextResponse(
+            "The front end has not been built yet.\n\n"
+            "    cd frontend && npm install && npm run build\n\n"
+            "That writes static/app/. Then reload this page.\n"
+            "The original single-page UI is still at /classic.",
+            status_code=503)
+    return FileResponse(page)
+
+
+@app.get("/classic")
+def classic():
+    """The original single-file UI, kept for debugging.
+
+    It renders the raw agent trace — every tool call, every score — which the
+    React panels summarise away. Useful when retrieval misbehaves, wrong as a
+    front door.
+    """
     return FileResponse(os.path.join(STATIC, "index.html"))
 
 
@@ -366,7 +391,8 @@ if os.path.isdir(_assets):
 
 @app.get("/app")
 def app_page():
-    """The React build. The original page stays at / until this one replaces it.
+    """The React build, also reachable here. / serves the same page; this path
+    stays so links made before the swap keep working.
 
     static/app/ is BUILD OUTPUT — derived, gitignored, and absent from a fresh clone.
     Serving a file that is not there raised a bare 500 that said nothing; a missing
@@ -378,6 +404,6 @@ def app_page():
             "The front end has not been built yet.\n\n"
             "    cd frontend && npm install && npm run build\n\n"
             "That writes static/app/. Then reload this page.\n"
-            "The original single-page UI is still at /.",
+            "The original single-page UI is still at /classic.",
             status_code=503)
     return FileResponse(page)
