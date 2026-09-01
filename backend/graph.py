@@ -66,6 +66,7 @@ SELECT n.node_key, n.name,
 FROM graph_nodes n WHERE n.node_key = ANY(%(keys)s)
 """
 
+@traceable(run_type="tool", name="graph.genres")
 def graph_genres():
     """Every genre in the catalogue, as the model must spell them. Enumerable, so it
     belongs in the tool description rather than being guessed at."""
@@ -73,6 +74,7 @@ def graph_genres():
         return [r[0] for r in conn.execute(
             "SELECT name FROM graph_nodes WHERE node_type = 'genre' ORDER BY name")]
 
+@traceable(run_type="retriever", name="graph.find")
 def graph_find(director=None, actor=None, genre=None, similar_to=None, limit=GRAPH_LIMIT):
     """Exact catalogue lookup over the knowledge graph.
 
@@ -178,6 +180,7 @@ WHERE e.from_key  = %(film_key)s
   AND e.edge_type = ANY(%(types)s)
 """
 
+@traceable(run_type="retriever", name="graph.availability")
 def availability(title):
     """Where one film can be watched, priced and grouped, cheapest band first.
 
@@ -231,6 +234,7 @@ def availability(title):
             "link": link,
             "offers": offers}
 
+@traceable(run_type="tool", name="graph.film_titles")
 def graph_film_titles():
     """Every film title in the catalogue, longest first.
 

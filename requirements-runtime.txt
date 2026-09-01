@@ -1,0 +1,34 @@
+# Runtime dependencies only — what the CONTAINER installs.
+#
+# WHY A SECOND FILE
+#     requirements.txt is the full development environment: pandas, pyarrow, datasets,
+#     ragas, scipy. None of it runs in production; all of it would be downloaded into
+#     the image, every build, for nothing. This file is the subset backend/ actually
+#     imports, plus uvicorn, which nothing imports because it is the thing doing the
+#     importing.
+#
+# HOW IT CANNOT DRIFT
+#     tests/test_runtime_deps.py reads backend/'s imports and fails if one of them is
+#     missing here, and fails again if a version here disagrees with requirements.txt.
+#     Two files listing the same versions is exactly the shape that rots quietly.
+#
+# TRANSITIVE PINS
+#     Only direct dependencies are pinned; pip resolves the rest. requirements.txt is
+#     the full freeze and stays the reproducible one. Stated plainly rather than
+#     implied.
+
+boto3==1.43.72
+botocore==1.43.72
+fastapi==0.141.1
+httpx==0.28.1
+langchain-aws==1.7.2
+langchain-core==1.6.0
+langgraph==1.2.11
+langgraph-checkpoint==4.2.0
+langgraph-prebuilt==1.1.0
+langsmith==0.11.1
+psycopg==3.3.4
+psycopg-binary==3.3.4
+pydantic==2.13.4
+python-dotenv==1.2.2
+uvicorn==0.52.3

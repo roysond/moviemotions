@@ -96,6 +96,7 @@ ORDER BY (lower(m.title) = lower(%(exact)s)) DESC, length(m.title)
 LIMIT 5
 """
 
+@traceable(run_type="retriever", name="retrieval.get_film")
 def get_film(title):
     """Look a film up BY NAME. No embedding, no reranker, no vectors at all.
 
@@ -136,6 +137,20 @@ def _document_for_rerank(chunk, header_at_rerank):
         return f"{chunk['context_header']}\n\n{chunk['content']}"
     return chunk["content"]
 
+
+def _chunk_count(inputs):
+    """~50 chunks with their full text are already in the rerank span above this one.
+
+    Logging them again here would double the payload and tell you nothing new. What is
+    worth seeing at this step is how many went in and how many films came out.
+    """
+    shown = {k: v for k, v in inputs.items() if k != "chunks"}
+    shown["chunks"] = f"{len(inputs.get('chunks') or [])} ranked chunk(s)"
+    return shown
+
+
+@traceable(run_type="chain", name="retrieval.collapse_to_films",
+           process_inputs=_chunk_count)
 def _collapse_to_films(chunks, limit, pool=3):
     """Many ranked chunks in → one row per film out, scored by BREADTH of evidence.
 
@@ -172,6 +187,8 @@ def _collapse_to_films(chunks, limit, pool=3):
     films.sort(key=lambda f: f["score"], reverse=True)
     return films[:limit]
 
+@traceable(run_type="retriever", name="retrieval.search",
+           process_inputs=_hide_vectors)
 def search(query, limit=3, use_rerank=True, plot_k=30, other_k=10,
            variant="context_header", header_at_rerank=False, query_vector=None,
            max_runtime=None, min_runtime=None, after_year=None, before_year=None,
@@ -290,6 +307,7 @@ WHERE m.source = 'tmdb'
 ORDER BY m.title
 """
 
+@traceable(run_type="chain", name="retrieval.excluded_by_filters")
 def excluded_by_filters(max_runtime=None, min_runtime=None,
                         after_year=None, before_year=None):
     """Which catalogue films these hard filters keep out of the pool entirely.
