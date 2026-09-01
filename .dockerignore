@@ -1,0 +1,25 @@
+# Everything the image does not need. Each line is a smaller, faster build.
+.git
+.github
+.venv
+frontend/node_modules
+static/app
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+_to_delete
+experiments
+evals
+pipeline
+scripts
+tests
+docs
+data
+*.md
+*.html
+!static/index.html
+.env
+.env.*
+!.env.example
+requirements.txt

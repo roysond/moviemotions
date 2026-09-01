@@ -64,6 +64,8 @@ def _invoke_with_backoff(**kwargs):
         "Re-run — finished work is committed and embeddings are cached."
     )
 
+@traceable(run_type="embedding", name="bedrock.embed",
+           process_outputs=_embedding_shape)
 def embed(text):
     """Turn a piece of text into a vector."""
     response = _invoke_with_backoff(
@@ -81,6 +83,7 @@ def embed(text):
     )
     return json.loads(response["body"].read())["embeddings"][0]["embedding"]
 
+@traceable(run_type="chain", name="cohere.rerank")
 def rerank(query, documents, top_n):
     """Reorder documents by reading each against the query. Returns [{index, score}].
 
