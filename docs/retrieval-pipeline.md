@@ -147,15 +147,43 @@ doing a second, harder job. Its clean primary role is the gate.
 
 ## Where MovieMotions is right now
 
-- Stage 1 metadata gate — NOT built (no query parsing yet)
-- Stage 1b knowledge graph — NOT built (overkill at 20 films; a real point at scale)
-- Stage 2a vector — **built**
-- Stage 2b BM25 — NOT built
-- Stage 3 RRF — NOT built (nothing to fuse until 2b exists)
-- Stage 4 reranker — NOT built ← **highest-value next step; needs no second list**
-- Stage 5 return — **built** (with one-row-per-film dedupe)
+*Rewritten 30 Aug 2026. The list below described Pass 1 and had gone badly stale — five of
+the seven stages had changed state and the page still said they had not. Prose drift is the
+one kind the docs gate cannot catch, because nothing in it points at a file.*
 
-Today the system runs: **Stage 2a → dedupe → Stage 5.** Everything else is the roadmap.
+- Stage 1 metadata gate — **built.** Runtime, year and a named-film exclusion, as `WHERE`
+  clauses on the film table. Extracted by the agent as tool arguments; there is still no
+  separate parser, and there does not need to be.
+- Stage 1b knowledge graph gate — **built (30 Aug).** Genre, actor and director as `EXISTS`
+  clauses against `graph_edges`, in the same inner query as the column filters, so the
+  per-source chunk quota is spent only on eligible films. Filter, then budget, then rank.
+- Stage 2a vector — **built.** pgvector, arm D (header in the stored vector only).
+- Stage 2b BM25 — NOT built. Retrieval is vector-only; there is no lexical arm.
+- Stage 3 RRF — NOT built. Nothing to fuse until 2b exists.
+- Stage 4 reranker — **built.** Cohere rerank-v3.5 over the ~50 candidates.
+- Stage 5 return — **built.** Chunks collapse into films by a damped sum of each film's best
+  three chunks, so breadth of evidence beats one lucky scene.
 
-**The reranker is first** because it fixes the `1/3` regression (Jurassic Park and Alien buried by
-mood chunks get re-read and pulled back up) and it needs no second search to exist.
+Today the system runs: **Stage 1 + 1b → Stage 2a → Stage 4 → collapse → Stage 5.**
+
+**The gate's effect has NOT been measured cleanly, and the note that first said otherwise
+was wrong.** Get Out scored 0.089 on *"tense, creatures hunting people"* across all twenty
+films, and 0.626 on *"a frightening film about being trapped somewhere"* with
+`genre="Horror"`. Those are two different queries. The pair says nothing about what the gate
+is worth, and "same query, same corpus" was written into two documents before anyone
+checked which query produced which number. The controlled version is one line of work — run
+the gated query with the gate off — and until it is run, the gate is justified by argument
+and not by measurement.
+
+**The caution that comes with it.** A gate deletes rows before anything can score them, so it
+is only set from facts the USER named. A genre inferred from a mood and then enforced removes
+the right answer before it has a chance, which is precisely how a carried-over `max_runtime`
+once deleted the only film in the catalogue about magic.
+
+**What is still missing at this stage.** Nothing refuses to answer. Stage 5 always returns
+three films, however weak the match, so an unanswerable question is indistinguishable from an
+answerable one in the shape of the output — though not in the numbers, where a hopeless query
+reads flat and low (0.244, 0.143, 0.124…) against an answerable one reading steep and high
+(0.716, 0.395, 0.358…). A relevance floor is the next measured decision, and the obvious
+threshold is already known to be wrong: a flat cut at 0.25 deletes Alien from "creatures
+hunting people".

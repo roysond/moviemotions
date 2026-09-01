@@ -54,8 +54,9 @@
 <p>A mood- and situation-driven film recommendation <strong>agent</strong>. You describe how you want to feel or what you want to watch — <em>"something tense where creatures hunt people, under two hours"</em> — and it decides what to look up, searches a scene-level corpus, judges what came back, and either recommends something or tells you plainly that nothing fits.</p>
 <p>Built from scratch in passes as a working study of retrieval and agent design. It is not a wrapper around a hosted RAG service: the chunking, retrieval, reranking, agent loop and evaluation harness are all in this repo.</p>
 <p>It then shows <strong>where each film can actually be watched, and what each way costs.</strong></p>
-<pre><code>you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ pgvector + rerank
-           ▲                                   lookup_film         ──▶ exact title
+<pre><code>you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ graph + column filters
+           ▲                                                         THEN pgvector + rerank
+           │                                   lookup_film         ──▶ exact title
            │                                   find_films_by_fact  ──▶ knowledge graph
            │                                   check_availability  ──▶ graph + backend/providers.py
            └────── reads the results, decides again ◀────────────────────┘
@@ -65,6 +66,7 @@
                                ▼
                   answer  +  a panel of posters, reasons and prices</code></pre>
 <p>Three of those four tools never touch a model.</p>
+<p><code>search_films</code> filters <strong>before</strong> it ranks. Runtime and year are columns on <code>movies</code>; genre, actor and director are edges in the knowledge graph, checked with an <code>EXISTS</code> in the same query. Whatever survives is what the vector search sees. When nothing survives, the tool works out which constraint is to blame — length is a convenience and may be given up, a genre is the request and never is — and offers the trade instead of returning nothing.</p>
 <hr>
 <h2 id="what-it-does-that-a-plain-rag-pipeline-doesn-t">What it does that a plain RAG pipeline doesn't</h2>
 <table><thead><tr><th></th><th></th></tr></thead><tbody>

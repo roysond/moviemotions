@@ -12,8 +12,9 @@ are all in this repo.
 It then shows **where each film can actually be watched, and what each way costs.**
 
 ```
-you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ pgvector + rerank
-           ▲                                   lookup_film         ──▶ exact title
+you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ graph + column filters
+           ▲                                                         THEN pgvector + rerank
+           │                                   lookup_film         ──▶ exact title
            │                                   find_films_by_fact  ──▶ knowledge graph
            │                                   check_availability  ──▶ graph + backend/providers.py
            └────── reads the results, decides again ◀────────────────────┘
@@ -25,6 +26,12 @@ you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films   
 ```
 
 Three of those four tools never touch a model.
+
+`search_films` filters **before** it ranks. Runtime and year are columns on `movies`; genre,
+actor and director are edges in the knowledge graph, checked with an `EXISTS` in the same
+query. Whatever survives is what the vector search sees. When nothing survives, the tool works
+out which constraint is to blame — length is a convenience and may be given up, a genre is the
+request and never is — and offers the trade instead of returning nothing.
 
 ---
 
