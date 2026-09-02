@@ -134,9 +134,47 @@ def split_content(message):
     return "".join(visible).strip(), " ".join(reasoning).strip()
 
 
+NO_ANSWER = ("I could not put an answer together. Tell me a mood, a genre, or a film "
+             "you liked, and I will find something.")
+
+
+def empty_reply(message):
+    """True when this reply would be stored with nothing in it.
+
+    Nova answers in typed blocks. It can return a `reasoning_content` block and no
+    `text` block — most often to a greeting, which the system prompt gives it nothing
+    to say to. `split_content` then yields "".
+
+    A reply carrying TOOL CALLS is never empty, however blank its text: the tool call
+    is the content, and Bedrock encodes it as a toolUse block.
+    """
+    # .strip(): split_content strips the block-list shape but returns a plain string
+    # untouched, so "   \n " arrives here looking like content. It is not.
+    return (not split_content(message)[0].strip()
+            and not getattr(message, "tool_calls", None))
+
+
 def think(state: MessagesState) -> dict:
-    """NODE — ask the model what to do next, given everything that has happened."""
+    """NODE — ask the model what to do next, given everything that has happened.
+
+    THE EMPTY-REPLY GUARD
+        An empty reply is harmless to SHOW — the user sees a blank — and poisonous to
+        KEEP. The checkpointer saves it, the next question in the same thread replays
+        the whole conversation, and Bedrock rejects a message whose content is empty:
+
+            ValidationException: The content field in the Message object at
+            messages.1 is empty.
+
+        So the turn that breaks is never the turn that caused it. Someone says "hi",
+        gets a blank, asks a real question a minute later, and THAT one fails. The two
+        halves were each correct; nothing tested the join.
+
+        The fix is to refuse the empty reply at the door rather than to sanitise the
+        history later. One place, one rule: nothing empty enters the state.
+    """
     reply = llm_with_tools.invoke([SystemMessage(SYSTEM_PROMPT)] + state["messages"])
+    if empty_reply(reply):
+        reply = AIMessage(content=NO_ANSWER, id=reply.id)
     return {"messages": [reply]}
 
 
