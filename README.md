@@ -11,6 +11,8 @@ are all in this repo.
 
 It then shows **where each film can actually be watched, and what each way costs.**
 
+**Running live:** https://mo-db261ab39326404bbed2043d7c6251df.ecs.us-east-1.on.aws — a container on ECS Fargate behind an HTTPS load balancer, talking to managed Postgres with pgvector. See [Deployment](#deployment).
+
 ```
 you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ graph + column filters
            ▲                                                         THEN pgvector + rerank
@@ -245,11 +247,16 @@ evidence, and the human-review step with buttons:
 uvicorn backend.api:app --reload --port 8000
 ```
 
-Then open **http://127.0.0.1:8000** for the original page, or **/app** for the two-panel
-React interface.
+Then open **http://127.0.0.1:8000**. Three routes, two pages:
+
+| path | what it serves |
+|---|---|
+| `/` | the React two-panel interface — chat on the left, posters and prices on the right |
+| `/app` | the same page. Kept so links made before the swap still work |
+| `/classic` | the original single-file page. It renders the **raw agent trace** — every tool call, argument and score — which the React panels summarise away. Useful when retrieval misbehaves, wrong as a front door |
 
 `static/app/` is build output — derived, gitignored, and absent from a fresh clone — so
-**/app answers 503 with instructions until you build it**:
+**`/` answers 503 with instructions until you build it**:
 
 ```bash
 cd frontend && npm install && npm run build     # writes static/app/, then restart uvicorn
@@ -389,6 +396,95 @@ then written down so they cannot recur.
 
 `scripts/repo_check.py` uses the standard library only. A gate that needs a dependency install
 can be broken *by* a dependency.
+
+---
+
+## Deployment
+
+The app runs on AWS. Nothing here is required to run it locally — this section exists so the
+deployment is reproducible and so the trade-offs are written down.
+
+| piece | what it does |
+|---|---|
+| **ECR** | private registry. Holds the image; runs nothing |
+| **ECS Express Mode on Fargate** | runs the container, restarts it, scales it. No server to patch |
+| **Application Load Balancer** | the public HTTPS front door, created by Express Mode with its own certificate |
+| **RDS PostgreSQL + pgvector** | the same schema as local, loaded with `pg_dump \| psql` |
+| **Secrets Manager** | the two API keys. `DATABASE_URL` is still an environment variable — the next thing to move |
+| **IAM, two roles** | `ecsTaskExecutionRole` pulls the image, writes logs and reads secrets; `moviemotions-task` lets the *application* call Bedrock. Different jobs, never merged |
+| **CloudWatch** | one log line per request |
+
+### The image
+
+```dockerfile
+FROM node:22-slim AS frontend     # compiles the React app…
+FROM python:3.13-slim AS runtime  # …and is then discarded
+```
+
+Node is a build tool, not a runtime dependency, so it does not ship. The runtime installs
+`requirements-runtime.txt` — 15 direct pins, the production subset of `requirements.txt` —
+so the image carries no RAGAS, no pytest and no eval judge. Three tests in
+`tests/test_runtime_deps.py` keep the two files honest: the runtime file must cover every
+`backend/` import, its versions must match, and nothing extra may creep in.
+
+### The deploy loop
+
+```bash
+uvicorn backend.api:app --port 8010          # 1. prove it on localhost FIRST
+docker build --platform linux/amd64 --provenance=false \
+             -t <account>.dkr.ecr.<region>.amazonaws.com/moviemotions:vN .
+aws ecr get-login-password --region <region> \
+  | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
+docker push <account>.dkr.ecr.<region>.amazonaws.com/moviemotions:vN
+# then: ECS console → the service → Update service → Image URI ends :vN → Update
+```
+
+**Both flags on the build are load-bearing, and both fail silently without it.**
+`--platform linux/amd64` because an Apple Silicon image will not run on AWS.
+`--provenance=false` because Docker otherwise adds an attestation manifest that ECS rejects.
+
+**Compare the build's `exporting manifest sha256:…` with the push's `digest: sha256:…`
+every time.** The first push here shipped the *previous* image, because the rebuild had run
+in the wrong directory. Nothing else revealed it.
+
+**The tag is the deploy unit.** A moving `:latest` makes "which code is running?"
+unanswerable; a tag per deploy makes rollback a dropdown.
+
+### Secrets — three questions, three services
+
+| question | answered by |
+|---|---|
+| Where is the value stored? | Secrets Manager |
+| Who is allowed to read it? | IAM |
+| Who needs it, and under what name? | ECS |
+
+**When a task definition's value type says Secrets Manager, the value is an *address*** — it
+begins `arn:aws:secretsmanager:`. Leaving the key itself there makes ECS treat the key as the
+*name* of a parameter to look up, fail, and print the name it tried. That is how a live key
+ends up in error text.
+
+The IAM grant is deliberately narrow — `secretsmanager:GetSecretValue` on
+`moviemotions/*`, inline on the execution role. Read only, this project only, and the prefix
+means a new secret named `moviemotions/<thing>` needs no IAM change at all. The AWS-managed
+`SecretsManagerReadWrite` would have granted every secret in the account, plus writes.
+
+### Cost shape
+
+The load balancer and the database bill around the clock whatever the traffic; Fargate bills
+while a task runs. Deleting the Express service removes the load balancer, certificate,
+target group and log group with it. RDS has a *Stop temporarily* action that restarts
+automatically after seven days.
+
+### What deployment taught that local development could not
+
+- **A page that loads proves the container and the load balancer, and nothing else.** Only a
+  real query exercises the database, Bedrock and the reranker.
+- **A rolling deployment never takes the site down.** If the new task cannot start, the old
+  one keeps serving — which is why a bad configuration costs time and nothing else.
+- **The stopped task's reason is the diagnosis.** ECS → Tasks → filter *Stopped* → read *Last
+  status*. Five identical failures in nine minutes says it without opening anything.
+- **`hi` is a test case.** A greeting produced an empty model reply, which was stored, and
+  broke the *next* question in that thread. No eval case covers greetings; production did.
 
 ---
 

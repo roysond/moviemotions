@@ -54,6 +54,7 @@
 <p>A mood- and situation-driven film recommendation <strong>agent</strong>. You describe how you want to feel or what you want to watch — <em>"something tense where creatures hunt people, under two hours"</em> — and it decides what to look up, searches a scene-level corpus, judges what came back, and either recommends something or tells you plainly that nothing fits.</p>
 <p>Built from scratch in passes as a working study of retrieval and agent design. It is not a wrapper around a hosted RAG service: the chunking, retrieval, reranking, agent loop and evaluation harness are all in this repo.</p>
 <p>It then shows <strong>where each film can actually be watched, and what each way costs.</strong></p>
+<p><strong>Running live:</strong> https://mo-db261ab39326404bbed2043d7c6251df.ecs.us-east-1.on.aws — a container on ECS Fargate behind an HTTPS load balancer, talking to managed Postgres with pgvector. See <a href="#deployment">Deployment</a>.</p>
 <pre><code>you ──▶ agent (LangGraph) ──▶ picks a tool ──▶ search_films        ──▶ graph + column filters
            ▲                                                         THEN pgvector + rerank
            │                                   lookup_film         ──▶ exact title
@@ -195,8 +196,13 @@ python -m pipeline.build_graph       # films · people · genres · keywords →
 <h2 id="running-it">Running it</h2>
 <p><strong>Web UI</strong> — shows the tool chosen, its exact arguments, every result with its score and quoted evidence, and the human-review step with buttons:</p>
 <pre><code class="lang-bash">uvicorn backend.api:app --reload --port 8000</code></pre>
-<p>Then open <strong>http://127.0.0.1:8000</strong> for the original page, or <strong>/app</strong> for the two-panel React interface.</p>
-<p><code>static/app/</code> is build output — derived, gitignored, and absent from a fresh clone — so <strong>/app answers 503 with instructions until you build it</strong>:</p>
+<p>Then open <strong>http://127.0.0.1:8000</strong>. Three routes, two pages:</p>
+<table><thead><tr><th>path</th><th>what it serves</th></tr></thead><tbody>
+<tr><td><code>/</code></td><td>the React two-panel interface — chat on the left, posters and prices on the right</td></tr>
+<tr><td><code>/app</code></td><td>the same page. Kept so links made before the swap still work</td></tr>
+<tr><td><code>/classic</code></td><td>the original single-file page. It renders the <strong>raw agent trace</strong> — every tool call, argument and score — which the React panels summarise away. Useful when retrieval misbehaves, wrong as a front door</td></tr>
+</tbody></table>
+<p><code>static/app/</code> is build output — derived, gitignored, and absent from a fresh clone — so <strong><code>/</code> answers 503 with instructions until you build it</strong>:</p>
 <pre><code class="lang-bash">cd frontend &amp;&amp; npm install &amp;&amp; npm run build     # writes static/app/, then restart uvicorn</code></pre>
 <p>Restarting matters: the server mounts <code>/app/assets/</code> only if that folder exists when it starts, so a build made while the server is running is not picked up until it reloads.</p>
 <p><strong>The React front end</strong>, in development, with hot reload:</p>
@@ -254,6 +260,50 @@ python -m pytest tests -q   # THE MATHS: no model, no database, 0.6 seconds</cod
 <p><strong>A green build is not a working system.</strong> Switching the critic off left a routing function returning a value the graph had not been told to expect, so every request returned 500 — and all four checks passed, because the file still parsed and no unit test touches the graph. Re-run the thing you changed.</p>
 <p>Every check exists because it caught something real — the <code>.gitignore</code> rule that silently excluded <code>graph_schema.sql</code>, three environment variables the code required and the template omitted, a doc pointing at a file that no longer existed, and three <code>import build_graph</code> lines left behind by the folder reorganisation. Found by hand once, then written down so they cannot recur.</p>
 <p><code>scripts/repo_check.py</code> uses the standard library only. A gate that needs a dependency install can be broken <em>by</em> a dependency.</p>
+<hr>
+<h2 id="deployment">Deployment</h2>
+<p>The app runs on AWS. Nothing here is required to run it locally — this section exists so the deployment is reproducible and so the trade-offs are written down.</p>
+<table><thead><tr><th>piece</th><th>what it does</th></tr></thead><tbody>
+<tr><td><strong>ECR</strong></td><td>private registry. Holds the image; runs nothing</td></tr>
+<tr><td><strong>ECS Express Mode on Fargate</strong></td><td>runs the container, restarts it, scales it. No server to patch</td></tr>
+<tr><td><strong>Application Load Balancer</strong></td><td>the public HTTPS front door, created by Express Mode with its own certificate</td></tr>
+<tr><td><strong>RDS PostgreSQL + pgvector</strong></td><td>the same schema as local, loaded with `pg_dump \</td><td>psql`</td></tr>
+<tr><td><strong>Secrets Manager</strong></td><td>the two API keys. <code>DATABASE_URL</code> is still an environment variable — the next thing to move</td></tr>
+<tr><td><strong>IAM, two roles</strong></td><td><code>ecsTaskExecutionRole</code> pulls the image, writes logs and reads secrets; <code>moviemotions-task</code> lets the <em>application</em> call Bedrock. Different jobs, never merged</td></tr>
+<tr><td><strong>CloudWatch</strong></td><td>one log line per request</td></tr>
+</tbody></table>
+<h3 id="the-image">The image</h3>
+<pre><code class="lang-dockerfile">FROM node:22-slim AS frontend     # compiles the React app…
+FROM python:3.13-slim AS runtime  # …and is then discarded</code></pre>
+<p>Node is a build tool, not a runtime dependency, so it does not ship. The runtime installs <code>requirements-runtime.txt</code> — 15 direct pins, the production subset of <code>requirements.txt</code> — so the image carries no RAGAS, no pytest and no eval judge. Three tests in <code>tests/test_runtime_deps.py</code> keep the two files honest: the runtime file must cover every <code>backend/</code> import, its versions must match, and nothing extra may creep in.</p>
+<h3 id="the-deploy-loop">The deploy loop</h3>
+<pre><code class="lang-bash">uvicorn backend.api:app --port 8010          # 1. prove it on localhost FIRST
+docker build --platform linux/amd64 --provenance=false \
+             -t &lt;account&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com/moviemotions:vN .
+aws ecr get-login-password --region &lt;region&gt; \
+  | docker login --username AWS --password-stdin &lt;account&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com
+docker push &lt;account&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com/moviemotions:vN
+# then: ECS console → the service → Update service → Image URI ends :vN → Update</code></pre>
+<p><strong>Both flags on the build are load-bearing, and both fail silently without it.</strong> <code>--platform linux/amd64</code> because an Apple Silicon image will not run on AWS. <code>--provenance=false</code> because Docker otherwise adds an attestation manifest that ECS rejects.</p>
+<p><strong>Compare the build's <code>exporting manifest sha256:…</code> with the push's <code>digest: sha256:…</code> every time.</strong> The first push here shipped the <em>previous</em> image, because the rebuild had run in the wrong directory. Nothing else revealed it.</p>
+<p><strong>The tag is the deploy unit.</strong> A moving <code>:latest</code> makes "which code is running?" unanswerable; a tag per deploy makes rollback a dropdown.</p>
+<h3 id="secrets-three-questions-three-services">Secrets — three questions, three services</h3>
+<table><thead><tr><th>question</th><th>answered by</th></tr></thead><tbody>
+<tr><td>Where is the value stored?</td><td>Secrets Manager</td></tr>
+<tr><td>Who is allowed to read it?</td><td>IAM</td></tr>
+<tr><td>Who needs it, and under what name?</td><td>ECS</td></tr>
+</tbody></table>
+<p><strong>When a task definition's value type says Secrets Manager, the value is an <em>address</strong></em> — it begins <code>arn:aws:secretsmanager:</code>. Leaving the key itself there makes ECS treat the key as the <em>name</em> of a parameter to look up, fail, and print the name it tried. That is how a live key ends up in error text.</p>
+<p>The IAM grant is deliberately narrow — <code>secretsmanager:GetSecretValue</code> on <code>moviemotions/*</code>, inline on the execution role. Read only, this project only, and the prefix means a new secret named <code>moviemotions/&lt;thing&gt;</code> needs no IAM change at all. The AWS-managed <code>SecretsManagerReadWrite</code> would have granted every secret in the account, plus writes.</p>
+<h3 id="cost-shape">Cost shape</h3>
+<p>The load balancer and the database bill around the clock whatever the traffic; Fargate bills while a task runs. Deleting the Express service removes the load balancer, certificate, target group and log group with it. RDS has a <em>Stop temporarily</em> action that restarts automatically after seven days.</p>
+<h3 id="what-deployment-taught-that-local-development-could-not">What deployment taught that local development could not</h3>
+<ul>
+<li><strong>A page that loads proves the container and the load balancer, and nothing else.</strong> Only a real query exercises the database, Bedrock and the reranker.</li>
+<li><strong>A rolling deployment never takes the site down.</strong> If the new task cannot start, the old one keeps serving — which is why a bad configuration costs time and nothing else.</li>
+<li><strong>The stopped task's reason is the diagnosis.</strong> ECS → Tasks → filter <em>Stopped</em> → read <em>Last status</em>. Five identical failures in nine minutes says it without opening anything.</li>
+<li><strong><code>hi</code> is a test case.</strong> A greeting produced an empty model reply, which was stored, and broke the <em>next</em> question in that thread. No eval case covers greetings; production did.</li>
+</ul>
 <hr>
 <h2 id="documentation">Documentation</h2>
 <table><thead><tr><th>file</th><th>read it when</th></tr></thead><tbody>
