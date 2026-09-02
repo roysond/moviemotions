@@ -276,6 +276,24 @@
 <tr><td><strong>The restructure was one pull request, pure moves, no logic changes</strong></td><td>One variable. And it was only safe because the harness existed first: 37 tests, four CI jobs, a docs gate and a structure gate all go red the moment a move breaks something</td></tr>
 </tbody></table>
 <hr>
+<h2 id="deployment-1-2-september-2026">Deployment — 1–2 September 2026</h2>
+<table><thead><tr><th>Decision</th><th>Why</th></tr></thead><tbody>
+<tr><td><strong>ECS Fargate, not EC2</strong></td><td>There is a computer underneath and we never see it: no OS to patch, no SSH, no restart script. EC2 would earn its keep only for a specific machine shape — a GPU, a pinned kernel — and this needs neither</td></tr>
+<tr><td><strong>Not Lambda</strong></td><td>The agent loop takes 20+ seconds and holds a Postgres connection. Lambda suits short, spiky, event-driven work; a cold container reconnecting to the database on every request is slow and unkind to it. Lambda <em>would</em> fit the nightly availability refresh</td></tr>
+<tr><td><strong>ECS Express Mode</strong></td><td>App Runner stopped accepting new customers on 30 April 2026. Express Mode creates the load balancer, certificate, listener, target group, log group and scaling policy in one form — and deletes them together</td></tr>
+<tr><td><strong>A two-stage Docker build</strong></td><td>Node compiles the front end in stage one and is discarded; the runtime image carries Python only. The build tool is not a runtime dependency</td></tr>
+<tr><td><strong><code>requirements-runtime.txt</code>, separate from <code>requirements.txt</code></strong></td><td>The image should not ship RAGAS, pytest or the eval judge. Three tests keep the two files honest: the runtime file must cover every <code>backend/</code> import, versions must match, and nothing extra may creep in</td></tr>
+<tr><td><strong><code>--platform linux/amd64</code> and <code>--provenance=false</code>, always</strong></td><td>Apple Silicon builds do not run on AWS, and Docker's attestation manifest is rejected by ECS. Both are silent failures — the first push shipped the wrong image entirely and only the digest revealed it</td></tr>
+<tr><td><strong>The image tag is the deploy unit</strong> (<code>:v1</code>, <code>:v2</code>, <code>:v3</code>)</td><td>A moving <code>:latest</code> makes "which code is running?" unanswerable. A tag per deploy makes rollback a dropdown</td></tr>
+<tr><td><strong><code>/</code> serves the React build; <code>/classic</code> keeps the original page</strong></td><td>The public URL must show the finished thing. The original page renders the raw agent trace — every tool call and score — which the React panels summarise away, so it is kept as a debugging surface rather than deleted</td></tr>
+<tr><td><strong>Secrets in Secrets Manager, not environment variables</strong></td><td>An environment variable is readable by anyone with console access and gets printed in error text. The three questions are answered by three services on purpose: <strong>where is it stored</strong> (Secrets Manager), <strong>who may read it</strong> (IAM), <strong>who needs it</strong> (ECS)</td></tr>
+<tr><td><strong>An inline, prefix-scoped IAM policy — not <code>SecretsManagerReadWrite</code></strong></td><td><code>GetSecretValue</code> on <code>moviemotions/*</code> only. The AWS-managed policy grants every secret in the account plus write access. The prefix is what let the second secret need no IAM edit at all</td></tr>
+<tr><td><strong><code>ecsTaskExecutionRole</code> and <code>moviemotions-task</code> stay separate</strong></td><td>The execution role is what <em>ECS</em> uses to pull the image, write logs and fetch secrets. The task role is what <em>the application</em> uses to call Bedrock. Merging them gives the app permissions it never needs</td></tr>
+<tr><td><strong>An empty model reply is refused at the door, not cleaned up later</strong></td><td><code>think()</code> is the only place a reply enters the state. Sanitising history at send time would fix one caller and leave the bad value stored — and the bad value is what breaks the <em>next</em> request</td></tr>
+<tr><td><strong>One change per deployment</strong></td><td>Both failed deployments this session changed the image and something else at once, so each needed a round of guessing. The rule was already in force for code; it applies to configuration identically</td></tr>
+<tr><td><strong>Test on <code>localhost</code> before building an image</strong></td><td>A Docker build takes minutes and hides its own output. Every deployment this session that started with <code>uvicorn --port 8010</code> succeeded first time</td></tr>
+</tbody></table>
+<hr>
 <h2 id="four-things-worth-remembering-above-all">Four things worth remembering above all</h2>
 <ol>
 <li><strong>RAG is a noun, agentic is a verb.</strong> A pipeline versus a loop. Retrieval is one tool the loop can use.</li>

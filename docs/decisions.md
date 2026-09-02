@@ -301,6 +301,27 @@ changed. Two were already good, one does not apply, two were violated.
 
 ---
 
+## Deployment — 1–2 September 2026
+
+| Decision | Why |
+|---|---|
+| **ECS Fargate, not EC2** | There is a computer underneath and we never see it: no OS to patch, no SSH, no restart script. EC2 would earn its keep only for a specific machine shape — a GPU, a pinned kernel — and this needs neither |
+| **Not Lambda** | The agent loop takes 20+ seconds and holds a Postgres connection. Lambda suits short, spiky, event-driven work; a cold container reconnecting to the database on every request is slow and unkind to it. Lambda *would* fit the nightly availability refresh |
+| **ECS Express Mode** | App Runner stopped accepting new customers on 30 April 2026. Express Mode creates the load balancer, certificate, listener, target group, log group and scaling policy in one form — and deletes them together |
+| **A two-stage Docker build** | Node compiles the front end in stage one and is discarded; the runtime image carries Python only. The build tool is not a runtime dependency |
+| **`requirements-runtime.txt`, separate from `requirements.txt`** | The image should not ship RAGAS, pytest or the eval judge. Three tests keep the two files honest: the runtime file must cover every `backend/` import, versions must match, and nothing extra may creep in |
+| **`--platform linux/amd64` and `--provenance=false`, always** | Apple Silicon builds do not run on AWS, and Docker's attestation manifest is rejected by ECS. Both are silent failures — the first push shipped the wrong image entirely and only the digest revealed it |
+| **The image tag is the deploy unit** (`:v1`, `:v2`, `:v3`) | A moving `:latest` makes "which code is running?" unanswerable. A tag per deploy makes rollback a dropdown |
+| **`/` serves the React build; `/classic` keeps the original page** | The public URL must show the finished thing. The original page renders the raw agent trace — every tool call and score — which the React panels summarise away, so it is kept as a debugging surface rather than deleted |
+| **Secrets in Secrets Manager, not environment variables** | An environment variable is readable by anyone with console access and gets printed in error text. The three questions are answered by three services on purpose: **where is it stored** (Secrets Manager), **who may read it** (IAM), **who needs it** (ECS) |
+| **An inline, prefix-scoped IAM policy — not `SecretsManagerReadWrite`** | `GetSecretValue` on `moviemotions/*` only. The AWS-managed policy grants every secret in the account plus write access. The prefix is what let the second secret need no IAM edit at all |
+| **`ecsTaskExecutionRole` and `moviemotions-task` stay separate** | The execution role is what *ECS* uses to pull the image, write logs and fetch secrets. The task role is what *the application* uses to call Bedrock. Merging them gives the app permissions it never needs |
+| **An empty model reply is refused at the door, not cleaned up later** | `think()` is the only place a reply enters the state. Sanitising history at send time would fix one caller and leave the bad value stored — and the bad value is what breaks the *next* request |
+| **One change per deployment** | Both failed deployments this session changed the image and something else at once, so each needed a round of guessing. The rule was already in force for code; it applies to configuration identically |
+| **Test on `localhost` before building an image** | A Docker build takes minutes and hides its own output. Every deployment this session that started with `uvicorn --port 8010` succeeded first time |
+
+---
+
 ## Four things worth remembering above all
 
 1. **RAG is a noun, agentic is a verb.** A pipeline versus a loop. Retrieval is one tool the loop can use.
