@@ -114,7 +114,19 @@ IMPLICIT = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "LANGSMITH_API_KEY"}
 def check_env_example():
     if not os.path.exists(".env.example"):
         return fail("env", ".env.example is missing")
-    declared = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", open(".env.example", encoding="utf-8").read(),
+    # `#NAME=` counts as declared, and deliberately so.
+    #
+    # A variable read with os.environ.get(NAME, default) must NOT be written blank:
+    # .get returns the DEFAULT when the name is absent and "" when the name is
+    # present and empty. `BEDROCK_MODEL_AGENT=` would hand the agent an empty model
+    # id; `RAGAS_JUDGE_REPEATS=` would crash int(). So optional settings appear
+    # commented out in BOTH .env and .env.example — which documents the name, its
+    # default and its meaning without arming the footgun.
+    #
+    # The template's job is to tell a newcomer every name the code reads. A commented
+    # line does that. Requiring it to be live would force the exact blank values that
+    # break the app.
+    declared = set(re.findall(r"^#?([A-Z][A-Z0-9_]*)=", open(".env.example", encoding="utf-8").read(),
                               re.MULTILINE))
     read = {}
     for path in py_files():
