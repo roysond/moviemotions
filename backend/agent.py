@@ -40,21 +40,20 @@ import textwrap
 import uuid
 
 from dotenv import load_dotenv
-from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 
+from backend.models import chat_model
 from backend.tools import TOOLS
 
 load_dotenv()
 
-# The agent's model is its own setting, not the same knob as the embedding model.
-# One line to swap vendor or tier — the LLMProvider seam from Pass 0, honoured.
-AGENT_MODEL = os.environ.get("BEDROCK_MODEL_AGENT", os.environ["BEDROCK_MODEL_TEXT"])
-REGION = os.environ["AWS_REGION"]
+# Re-exported so backend/api.py and the traces keep importing it from here. WHICH
+# model, and whose, is decided in backend/config.py; this file must not know.
+from backend.config import AGENT_MODEL      # noqa: E402,F401
 MAX_PASSES = 6          # backstop only; natural termination should fire long before
 
 SYSTEM_PROMPT = """You are MovieMotions, a film recommendation assistant.
@@ -107,7 +106,7 @@ for a film, not for a description of your machinery. Say "Predator is a good fit
 because..." — never "the top result has a relevance score of 0.317".
 """
 
-llm = ChatBedrockConverse(model_id=AGENT_MODEL, region_name=REGION, temperature=0)
+llm = chat_model()
 llm_with_tools = llm.bind_tools(TOOLS)
 
 

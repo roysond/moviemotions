@@ -294,6 +294,23 @@
 <tr><td><strong>Test on <code>localhost</code> before building an image</strong></td><td>A Docker build takes minutes and hides its own output. Every deployment this session that started with <code>uvicorn --port 8010</code> succeeded first time</td></tr>
 </tbody></table>
 <hr>
+<h2 id="corpus-derivation-3-september-2026">Corpus derivation — 3 September 2026</h2>
+<table><thead><tr><th>Decision</th><th>Why</th></tr></thead><tbody>
+<tr><td><strong>Vertex is used at BUILD time, not run time</strong></td><td>Gemini as the live agent: 57.6s and 48.3K tokens against Nova's ~2s and ~10K, for fewer films. Writing the mood corpus runs offline with nobody waiting, so the one thing Gemini is bad at costs nothing there</td></tr>
+<tr><td><strong>Bedrock stays the default agent; the seam stays</strong></td><td>The loss was a <em>prompt</em> loss, not a model loss. The system prompt was tuned for Nova over weeks. <strong>Prompts do not transfer between models</strong></td></tr>
+<tr><td><strong>The mood judge is Royson's hand-written ground truth, not an LLM</strong></td><td>Which films feel warm is taste. A vendor eval service can score how well the text is written; it cannot score whether the text makes retrieval find the right films, because it does not know the database exists</td></tr>
+<tr><td><strong>A generic quality metric is not a task metric</strong></td><td>The distinction that decides whether a vendor eval product is the right tool. Usually it is not</td></tr>
+<tr><td><strong>The bake-off writes nothing to the database</strong></td><td><code>chunks</code> allows one row per (film, index), so four models' mood text cannot coexist. Running it in memory also means a bad challenger can never damage the live corpus</td></tr>
+<tr><td><strong>The bake-off parses the prompt out of <code>pipeline/derive_corpus.py</code>, never copies it</strong></td><td>A copied prompt drifts. Then the arms differ by model <em>and</em> instructions, and no number can be attributed to either</td></tr>
+<tr><td><strong>The noise floor is printed above the result</strong></td><td>5 queries, ceiling 15 — one film moving is 6.7 points. Stating it after seeing the number is how a non-result gets believed</td></tr>
+<tr><td><strong><code>gemini-2.5-pro</code> over <code>gemini-3.1-pro-preview</code></strong></td><td>Preview can change without warning. A model that silently rewrites your corpus later is not one you can promote, however good it is today</td></tr>
+<tr><td><strong>Model first, input second — never both</strong></td><td>Deriving mood from the plot as well as the overview is a second variable. Two clean measurements, or an unattributable one</td></tr>
+</tbody></table>
+<h3 id="storage-the-fact-that-sets-the-ceiling">Storage — the fact that sets the ceiling</h3>
+<p><code>pipeline/load_derived.py</code> glues <code>feel</code>, <code>moods</code> and <code>themes</code> into <strong>one paragraph and one vector</strong>. The individual moods cease to exist as data at that point. "Which films have the mood <em>panic</em>" is not a question the database can answer.</p>
+<p>Moods and themes are <strong>not</strong> in the knowledge graph — it allows film, person, genre, keyword and provider only, and is built entirely from <code>movies.raw_payload</code>.</p>
+<p><strong>The open proposal:</strong> two new node types (<code>mood</code>, <code>theme</code>) rather than new tables, <code>feel</code> as a column on <code>movies</code> rather than a table, and one extra argument on <code>find_films_by_fact</code> rather than three new tools. Blocked on a decision only Royson can make — <strong>writing the fixed mood vocabulary</strong>, the way TMDB fixed the 19 genres. Free-text moods cannot be looked up; nobody will ever type "sea peril".</p>
+<hr>
 <h2 id="four-things-worth-remembering-above-all">Four things worth remembering above all</h2>
 <ol>
 <li><strong>RAG is a noun, agentic is a verb.</strong> A pipeline versus a loop. Retrieval is one tool the loop can use.</li>

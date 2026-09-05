@@ -322,6 +322,37 @@ changed. Two were already good, one does not apply, two were violated.
 
 ---
 
+## Corpus derivation — 3 September 2026
+
+| Decision | Why |
+|---|---|
+| **Vertex is used at BUILD time, not run time** | Gemini as the live agent: 57.6s and 48.3K tokens against Nova's ~2s and ~10K, for fewer films. Writing the mood corpus runs offline with nobody waiting, so the one thing Gemini is bad at costs nothing there |
+| **Bedrock stays the default agent; the seam stays** | The loss was a *prompt* loss, not a model loss. The system prompt was tuned for Nova over weeks. **Prompts do not transfer between models** |
+| **The mood judge is Royson's hand-written ground truth, not an LLM** | Which films feel warm is taste. A vendor eval service can score how well the text is written; it cannot score whether the text makes retrieval find the right films, because it does not know the database exists |
+| **A generic quality metric is not a task metric** | The distinction that decides whether a vendor eval product is the right tool. Usually it is not |
+| **The bake-off writes nothing to the database** | `chunks` allows one row per (film, index), so four models' mood text cannot coexist. Running it in memory also means a bad challenger can never damage the live corpus |
+| **The bake-off parses the prompt out of `pipeline/derive_corpus.py`, never copies it** | A copied prompt drifts. Then the arms differ by model *and* instructions, and no number can be attributed to either |
+| **The noise floor is printed above the result** | 5 queries, ceiling 15 — one film moving is 6.7 points. Stating it after seeing the number is how a non-result gets believed |
+| **`gemini-2.5-pro` over `gemini-3.1-pro-preview`** | Preview can change without warning. A model that silently rewrites your corpus later is not one you can promote, however good it is today |
+| **Model first, input second — never both** | Deriving mood from the plot as well as the overview is a second variable. Two clean measurements, or an unattributable one |
+
+### Storage — the fact that sets the ceiling
+
+`pipeline/load_derived.py` glues `feel`, `moods` and `themes` into **one paragraph and one vector**. The
+individual moods cease to exist as data at that point. "Which films have the mood *panic*" is
+not a question the database can answer.
+
+Moods and themes are **not** in the knowledge graph — it allows film, person, genre, keyword and
+provider only, and is built entirely from `movies.raw_payload`.
+
+**The open proposal:** two new node types (`mood`, `theme`) rather than new tables, `feel` as a
+column on `movies` rather than a table, and one extra argument on `find_films_by_fact` rather
+than three new tools. Blocked on a decision only Royson can make — **writing the fixed mood
+vocabulary**, the way TMDB fixed the 19 genres. Free-text moods cannot be looked up; nobody will
+ever type "sea peril".
+
+---
+
 ## Four things worth remembering above all
 
 1. **RAG is a noun, agentic is a verb.** A pipeline versus a loop. Retrieval is one tool the loop can use.
