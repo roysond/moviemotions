@@ -29,10 +29,23 @@ print(f"location {LOCATION}")
 print(f"model    {MODEL}")
 print()
 
-from langchain_google_vertexai import ChatVertexAI      # noqa: E402
+# ChatGoogleGenerativeAI, NOT ChatVertexAI.
+#
+# LangChain deprecated ChatVertexAI in 3.2.0 and removes it in 4.0.0. Google is
+# consolidating two SDKs into one, and the runtime says so on every call.
+#
+# WHY THE ARGUMENTS MATTER MORE THAN THE CLASS NAME
+#     This class can reach Gemini two ways. Given an api_key it uses Google AI
+#     Studio — simple, and a long-lived secret in a file. Given `vertexai=True`
+#     with a project it uses Vertex AI and authenticates with Application
+#     Default Credentials, which live outside this project and rotate.
+#
+#     Same model either way. Only one of them keeps a key out of the repository,
+#     so the arguments below are the security decision, not the import line.
+from langchain_google_genai import ChatGoogleGenerativeAI      # noqa: E402
 
-llm = ChatVertexAI(model_name=MODEL, project=PROJECT, location=LOCATION,
-                   temperature=0)
+llm = ChatGoogleGenerativeAI(model=MODEL, vertexai=True, project=PROJECT,
+                             location=LOCATION, temperature=0)
 
 reply = llm.invoke("Reply with exactly these five words: Vertex AI is reachable now.")
 print("REPLY:", reply.content)

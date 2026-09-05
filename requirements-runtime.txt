@@ -22,7 +22,7 @@ botocore==1.43.72
 fastapi==0.141.1
 httpx==0.28.1
 langchain-aws==1.7.2
-langchain-core==1.6.0
+langchain-core==1.6.1
 langgraph==1.2.11
 langgraph-checkpoint==4.2.0
 langgraph-prebuilt==1.1.0

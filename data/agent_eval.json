@@ -2,7 +2,7 @@
   {
     "id": 1,
     "query": "tell me about Predator",
-    "answer": "Predator (1987) is a 107-minute film where a team of elite commandos on a secret mission in a Central American jungle find themselves hunted by an extraterrestrial warrior.",
+    "answer": "Predator (1987)\nRunning 107 minutes, it follows a squad of elite commandos on a covert mission in a Central American jungle who discover they are being stalked and hunted by an extraterrestrial warrior.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -16,14 +16,13 @@
   {
     "id": 2,
     "query": "I want something where creatures are hunting people, really tense",
-    "answer": "Based on the search results, here are some recommendations for a tense film where creatures are hunting people:\n   - A technologically advanced, humanoid predator stalks a team of soldiers, using its cloaking device and thermal vision to hunt them down in a tense and frightening atmosphere.\n2. **Terminator 2: Judgment Day (1991)**\n   - While not exactly creatures hunting people, a reprogrammed T-800 Terminator protects young John Connor from a new, shape-shifting Terminator, creating a tense and action-packed scenario.\nIf you're looking for something more specific or need further recommendations, feel free to let me know!",
+    "answer": "Predator (1987)\nIt delivers relentless tension as a team in the jungle is stalked and picked off by an invisible, technologically advanced humanoid creature using cloaking and thermal imaging.\n\nAvailability was checked on 2026-08-28:\nFree: Fandango at Home Free ($0, free with ads)\nSubscription: Peacock Premium ($12.99/mo, with ads), Peacock Premium Plus ($19.99/mo), fuboTV ($73.99/mo), YouTube TV ($82.99/mo)\nRent: Amazon Video (from $3.99), Apple TV Store (from $4.99), Fandango At Home (from $4.99), Google Play Movies (price unknown), YouTube (price unknown)\nBuy: Amazon Video (from $7.99), Apple TV Store (from $14.99), Fandango At Home (from $14.99), Google Play Movies (price unknown), YouTube (price unknown)\nTV provider login: FXNow (with your TV provider)\nVerify current availability: https://www.themoviedb.org/movie/106-predator/watch?locale=US",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
     "ungrounded": [],
     "missing": [],
     "named": [
-      "Terminator 2: Judgment Day",
       "Predator"
     ],
     "is_refusal": false
@@ -31,7 +30,7 @@
   {
     "id": 3,
     "query": "do you have The Godfather?",
-    "answer": "Sorry, but 'The Godfather' is not in our catalogue. This was an exact lookup, not a guess, so the film really is absent.",
+    "answer": "The Godfather is not in the catalogue.",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -43,25 +42,21 @@
   {
     "id": 4,
     "query": "a man wrongly imprisoned who never gives up",
-    "answer": "If you're looking for something similar but with a different twist, Inception offers a suspenseful and mind-bending experience that dives deep into themes of identity and reality. However, it's not a direct match to the story of a wrongly imprisoned man.\nFor another option, The Dark Knight is an intense and suspenseful film that explores themes of justice and heroism, though it doesn't center on a man wrongly imprisoned.\nLogan and Predator also offer intense and suspenseful experiences, but they too don't fit the specific theme of a man wrongly imprisoned who never gives up.\nSo, for your request, The Shawshank Redemption is the closest and most fitting recommendation.",
+    "answer": "The Shawshank Redemption\nAndy Dufresne is imprisoned for a double murder he did not commit, spending decades behind bars where he earns the admiration of his fellow prisoners through his enduring integrity and unshakeable hope.\nIn the US, it is not included on any subscription service, but it can be rented on Amazon Video (from $3.99), Apple TV Store (from $4.99), Fandango At Home (from $4.99), or on Google Play Movies, Plex, and YouTube (price unknown). It is available to buy on Amazon Video (from $7.99), Apple TV Store (from $14.99), Fandango At Home (from $14.99), or on Google Play Movies and YouTube (price unknown), and via Spectrum On Demand with a TV provider login. Availability was last checked on 2026-08-28 and can be verified at https://www.themoviedb.org/movie/278-the-shawshank-redemption/watch?locale=US.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
     "ungrounded": [],
     "missing": [],
     "named": [
-      "The Shawshank Redemption",
-      "The Dark Knight",
-      "Inception",
-      "Predator",
-      "Logan"
+      "The Shawshank Redemption"
     ],
     "is_refusal": false
   },
   {
     "id": 5,
     "query": "do you have a documentary about climate change?",
-    "answer": "I'm sorry, but nothing in the catalogue fits the description of a documentary about climate change with a serious and informative tone. If you have any other requests or need recommendations for different types of films, I'd be happy to help!",
+    "answer": "I do not have any documentaries or films about climate change in the catalogue.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "find_films_by_fact or search_films",
@@ -73,7 +68,7 @@
   {
     "id": 6,
     "query": "how long is Titanic?",
-    "answer": "\"Titanic\" is a 1997 film directed by James Cameron that runs for 194 minutes. The story is told by 101-year-old Rose DeWitt Bukater, recounting her experiences aboard the Titanic, from its departure to its tragic sinking on April 15, 1912.",
+    "answer": "Titanic runs for 194 minutes (3 hours and 14 minutes).",
     "tool_ok": true,
     "tool_called": "lookup_film",
     "tool_expected": "lookup_film",
@@ -87,7 +82,7 @@
   {
     "id": 7,
     "query": "anything by Christopher Nolan?",
-    "answer": "Here are some films directed by Christopher Nolan:\n- **Inception (2010)**\n  *A skilled thief who commits corporate espionage by infiltrating the subconscious of his targets is offered a chance to regain his old life as payment for a task considered to be impossible: inception, the implantation of another person's idea into a target's subconscious.*\n- **The Dark Knight (2008)**\n  *Batman raises the stakes in his war on crime. With the help of Lt. Jim Gordon and District Attorney Harvey Dent, Batman sets out to dismantle the remaining criminal organizations that plague the streets. The partnership proves to be effective, but they soon find themselves prey to a reign of chaos unleashed by a rising criminal mastermind known to the terrified citizens of Gotham as the Joker.*\nIf you need information on any of these films or others, just let me know!",
+    "answer": "Inception follows Cobb, a skilled corporate espionage thief who infiltrates the subconscious minds of his targets and is offered a chance to regain his former life if he can successfully plant an idea into someone's subconscious. It is available to stream for free with ads on YouTube Free, on subscription via Philo ($25.00/mo), fuboTV ($73.99/mo), or MGM+ through Amazon and Roku (prices unknown), to rent from Amazon Video (from $3.99), Apple TV Store (from $4.99), Fandango At Home (from $4.99), Google Play Movies (price unknown), Plex (price unknown), and YouTube (price unknown), or to buy from Amazon Video (from $7.99), Apple TV Store (from $14.99), Fandango At Home (from $14.99), Google Play Movies (price unknown), and YouTube (price unknown), with TV provider access on Spectrum On Demand (last checked 2026-08-28; verify at https://www.themoviedb.org/movie/27205-inception/watch?locale=US).\n\nThe Dark Knight follows Batman as he teams up with Lt. Jim Gordon and District Attorney Harvey Dent to dismantle Gotham's criminal organizations, only to be challenged by the reign of chaos unleashed by the Joker. It is available to stream on subscription with HBO Max ($10.99/mo, or price unknown through Amazon), to rent from Amazon Video (from $3.99), Apple TV Store (from $4.99), Fandango At Home (from $4.99), Google Play Movies (price unknown), and YouTube (price unknown), or to buy from Amazon Video (from $7.99), Apple TV Store (from $14.99), Fandango At Home (from $14.99), Google Play Movies (price unknown), and YouTube (price unknown) (last checked 2026-08-28; verify at https://www.themoviedb.org/movie/155-the-dark-knight/watch?locale=US).",
     "tool_ok": true,
     "tool_called": "find_films_by_fact",
     "tool_expected": "find_films_by_fact",
@@ -102,16 +97,14 @@
   {
     "id": 8,
     "query": "something like Jurassic Park but more intense",
-    "answer": "- **Alien (1979)**: This classic horror film is tense and foreboding, focusing on suspense, horror, and danger as a crew encounters an alien invasion and must fight for their survival.\nIf you're interested in more intense films similar to \"Jurassic Park,\" these two are strong recommendations.",
+    "answer": "Predator fits because it follows a team of elite commandos on a secret mission in a Central American jungle who find themselves hunted by an extraterrestrial warrior.\nAlien fits because it delivers a tense and foreboding atmosphere steeped in danger, horror, and suspense as characters fight for survival against an extraterrestrial threat.",
     "tool_ok": true,
     "tool_called": "search_films",
     "tool_expected": "search_films",
     "ungrounded": [],
-    "missing": [
-      "Predator"
-    ],
+    "missing": [],
     "named": [
-      "Jurassic Park",
+      "Predator",
       "Alien"
     ],
     "is_refusal": false
