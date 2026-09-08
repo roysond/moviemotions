@@ -1,3 +1,17 @@
+-- ┌──────────────────────────────────────────────────────────────────────────┐
+-- │ STATUS 7 Sep 2026 — THESE TABLES DO NOT EXIST.                           │
+-- │                                                                          │
+-- │ graph_nodes and graph_edges were dropped in the RAG rebuild and have not  │
+-- │ been recreated. `pg_dump` finds three tables: movies, movie_data,         │
+-- │ movie_vectors. This file is a DESIGN, not a description of the database.  │
+-- │                                                                          │
+-- │ Two changes to make before running it, both decided and not yet applied:  │
+-- │   · drop the `confidence` column — the graph returns no scores, so a      │
+-- │     column that must never vary from 1.0 should not exist                 │
+-- │   · drop the five AVAILABLE_* edge types until the pricing layer is       │
+-- │     rebuilt, so the CHECK describes what is actually stored               │
+-- └──────────────────────────────────────────────────────────────────────────┘
+
 -- Knowledge graph: nodes are things, edges are facts connecting two things.
 -- Additive only. Nothing here touches movies, chunks or chunk_embeddings.
 --

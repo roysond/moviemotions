@@ -68,6 +68,7 @@ langgraph-sdk==0.4.3
 langsmith==0.11.1
 markdown-it-py==4.2.0
 marshmallow==3.26.2
+mcp==2.2.0
 mdurl==0.1.2
 multidict==6.7.1
 multiprocess==0.70.19

@@ -1,269 +1,189 @@
+"""Derive the knowledge graph from the TMDB payloads already in the database.
+
+WHAT A GRAPH IS FOR, AND WHAT IT IS NOT FOR
+    "Anything by Nolan" is a yes/no question about an edge. It has no degrees, so it must
+    never touch a vector — a vector would return films that FEEL like Nolan films, which
+    is a different question answered confidently and wrongly.
+
+    So the graph is a FILTER, never a ranker, and it returns no scores. A person either
+    directed a film or did not, and attaching a confidence to a fact only invites the
+    caller to doubt it.
+
+DERIVED FROM movies.tmdb_raw_payload, NEVER FROM data/raw/
+    Reading the files would let the graph describe films that are not in `movies`.
+    Reading the stored payload makes that drift impossible. This is the same reason the
+    payload is kept in the first place: keep the raw thing, derive everything else.
+
+    Which also means: dropping both tables and re-running this is always safe, and is
+    the normal way to change the graph's shape.
+
+WHAT IS KEPT, AND WHY SO LITTLE
+    Top 10 cast, and crew filtered to directors. One film in this catalogue lists 148
+    crew. Noise in a graph is not free — it costs you at every traversal, forever, and a
+    hundred camera assistants make "who worked on both of these" meaningless.
+
+HOW A NODE IS NAMED
+    `film:27205`, `person:525`, `genre:878` — built from what the thing IS, so an edge
+    can be written without looking anything up first, and so a rebuild produces byte-
+    identical keys. Films are keyed by TMDB id, which is the natural key; joining to
+    `movies` is `'film:' || movies.tmdb_id`.
+
+RUN
+    python -m pipeline.build_graph            build or refresh
+    python -m pipeline.build_graph --status   counts by type, writes nothing
 """
-build_graph.py — derive a knowledge graph from the film payloads already in Postgres.
 
-The graph is DERIVED data, exactly like embeddings. The source of truth is
-movies.raw_payload; this script only reshapes it. Deleting the whole graph and
-rebuilding it must always be safe, and running this twice must change nothing.
-
-    python -m pipeline.build_graph              build (idempotent)
-    python -m pipeline.build_graph --status     what is in there now
-    python -m pipeline.build_graph --remove     delete every node and edge
-
-Nodes    film · person · genre · keyword · provider
-Edges    person -ACTED_IN->            film
-         person -DIRECTED->            film
-         film   -HAS_GENRE->           genre
-         film   -HAS_KEYWORD->         keyword
-         film   -AVAILABLE_FLATRATE->  provider     included in a subscription
-         film   -AVAILABLE_RENT->      provider     one-off rental
-         film   -AVAILABLE_BUY->       provider     one-off purchase
-         film   -AVAILABLE_ADS->       provider     free, advertising supported
-         film   -AVAILABLE_FREE->      provider     free, e.g. via a library card
-
-WHAT GOES IN AND WHAT DOES NOT
-    Everything TMDB said, unedited — including the four separate Paramount+
-    entries and the resellers. Tidying happens where the answer is DISPLAYED,
-    never where it is stored. Keep the raw thing; derive everything else from it.
-"""
-
+import argparse
 import os
 import sys
 
-# Run either way: `python -m pipeline.build_graph` from the repo root, or
-# `python pipeline/build_graph.py`. The second puts this file's OWN folder on the
-# path, not the repo root, so `backend` would not be importable without this line.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import psycopg                                                     # noqa: E402
+from dotenv import load_dotenv                                     # noqa: E402
 
-import os
-import re
-import sys
-
-import psycopg
-from dotenv import load_dotenv
-
-from backend import providers
-from psycopg.types.json import Json
+from backend.config import DATABASE_URL                            # noqa: E402
 
 load_dotenv()
 
-# How many billed actors per film become ACTED_IN edges. TMDB lists everyone
-# down to "Man in Diner"; past the top ten they are noise, not signal.
-CAST_TOP_N = 10
+TOP_CAST = 10
+DIRECTING_JOBS = ("Director",)
 
-SOURCE = "tmdb"          # every edge records where the claim came from
-CONFIDENCE = 1.0         # TMDB is a primary source, so we assert it plainly
-
-# Which country's streaming listings to load, and what those edges record as their
-# source. Both come from providers.py so there is exactly ONE definition of what
-# "available" means. TMDB carries 86 countries for these films; loading all of them
-# would add ~11,000 edges to a 634-edge graph and make it unreadable.
-REGION = providers.REGION
-AVAILABILITY_SOURCE = providers.SOURCE
-
-# TMDB's own category names -> our edge types. A missing key is IGNORED rather
-# than guessed at, so a category TMDB adds later shows up as absent, not as
-# something invented.
-OFFER_EDGE = {
-    "flatrate": "AVAILABLE_FLATRATE",
-    "rent":     "AVAILABLE_RENT",
-    "buy":      "AVAILABLE_BUY",
-    "ads":      "AVAILABLE_ADS",
-    "free":     "AVAILABLE_FREE",
-}
-
-
-# ---------------------------------------------------------------- helpers
-
-def slug(text: str) -> str:
-    """'Science Fiction' -> 'science-fiction'. Node keys stay readable."""
-    text = text.strip().lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")
-
-
-class Graph:
-    """Collects nodes and edges in memory, de-duplicating as it goes."""
-
-    def __init__(self):
-        self.nodes = {}          # node_key -> (node_type, name, properties)
-        self.edges = {}          # (from, to, type, source) -> properties
-        self.slug_owner = {}     # slug -> original name, to catch collisions
-
-    def node(self, node_type, key_part, name, **properties):
-        key = f"{node_type}:{key_part}"
-        # A genre and a keyword may share a name; they are still different nodes
-        # because the type is part of the key.
-        if node_type in ("genre", "keyword", "provider"):
-            seen = self.slug_owner.get(key)
-            if seen and seen != name:
-                print(f"  ! slug collision on {key}: '{seen}' vs '{name}'")
-            self.slug_owner[key] = name
-        self.nodes.setdefault(key, (node_type, name, properties))
-        return key
-
-    def edge(self, from_key, to_key, edge_type, source=SOURCE, **properties):
-        # Same person credited twice in one film collapses to one edge, which
-        # is what the UNIQUE constraint in the table would do anyway.
-        #
-        # `source` is part of the key here for the same reason it is part of the
-        # UNIQUE constraint: "TMDB's US listing" and "TMDB's GB listing" are two
-        # different claims about the same pair of things. Fold them together and
-        # the second country silently overwrites the first.
-        self.edges.setdefault((from_key, to_key, edge_type, source), properties)
-
-
-# ---------------------------------------------------------------- extract
-
-def build_from_payloads(rows) -> Graph:
-    g = Graph()
-
-    for movie_id, source_id, payload in rows:
-        film_key = g.node(
-            "film", source_id, payload["title"],
-            movie_id=movie_id,                 # the join back to the relational side
-            tmdb_id=payload["id"],
-            release_date=payload.get("release_date"),
-            runtime_minutes=payload.get("runtime"),
-            poster_path=payload.get("poster_path"),   # the UI needs a picture
-        )
-
-        for genre in payload.get("genres", []):
-            gk = g.node("genre", slug(genre["name"]), genre["name"],
-                        tmdb_id=genre["id"])
-            g.edge(film_key, gk, "HAS_GENRE")
-
-        for kw in payload.get("keywords", {}).get("keywords", []):
-            kk = g.node("keyword", slug(kw["name"]), kw["name"], tmdb_id=kw["id"])
-            g.edge(film_key, kk, "HAS_KEYWORD")
-
-        credits = payload.get("credits", {})
-
-        for member in credits.get("cast", [])[:CAST_TOP_N]:
-            pk = g.node("person", member["id"], member["name"],
-                        known_for=member.get("known_for_department"))
-            g.edge(pk, film_key, "ACTED_IN",
-                   character=member.get("character"),
-                   billing=member.get("order"))
-
-        for member in credits.get("crew", []):
-            if member.get("job") != "Director":
-                continue
-            pk = g.node("person", member["id"], member["name"],
-                        known_for=member.get("known_for_department"))
-            g.edge(pk, film_key, "DIRECTED")
-
-        add_availability(g, film_key, payload)
-
-    return g
-
-
-def add_availability(g, film_key, payload):
-    """Streaming, rental and purchase options for REGION, exactly as TMDB gave them.
-
-    A film with no block for this region contributes nothing — and that ABSENCE is
-    the point. "We hold no listing for the US" and "it is not available in the US"
-    are different answers, and only the caller can tell them apart if we refuse to
-    invent an empty list here.
-    """
-    region = (payload.get("watch/providers", {})
-                     .get("results", {})
-                     .get(REGION, {}))
-    if not region:
-        return
-
-    # TMDB's deep link for this film and region. Availability is the most
-    # perishable fact in the catalogue, so every answer carries a way to check it.
-    link = region.get("link")
-
-    for category, offers in region.items():
-        if not isinstance(offers, list):       # skips 'link', which is a string
-            continue
-        edge_type = OFFER_EDGE.get(category)
-        if edge_type is None:
-            print(f"  ! unknown offer category '{category}' — skipped, not guessed")
-            continue
-
-        for offer in offers:
-            pk = g.node("provider", slug(offer["provider_name"]), offer["provider_name"],
-                        tmdb_id=offer.get("provider_id"),
-                        logo_path=offer.get("logo_path"))
-            g.edge(film_key, pk, edge_type,
-                   source=AVAILABILITY_SOURCE,
-                   display_priority=offer.get("display_priority"),
-                   link=link)
-
-
-# ---------------------------------------------------------------- load
-
-INSERT_NODE = """
-INSERT INTO graph_nodes (node_key, node_type, name, properties)
-VALUES (%s, %s, %s, %s)
-ON CONFLICT (node_key) DO NOTHING
+PAYLOADS = """
+SELECT movie_id, title, tmdb_id, tmdb_raw_payload
+FROM movies
+ORDER BY movie_id
 """
 
-INSERT_EDGE = """
-INSERT INTO graph_edges (from_key, to_key, edge_type, properties, source, confidence)
-VALUES (%s, %s, %s, %s, %s, %s)
+NODE = """
+INSERT INTO graph_nodes (node_key, node_type, name, properties)
+VALUES (%(key)s, %(type)s, %(name)s, %(properties)s)
+ON CONFLICT (node_key) DO UPDATE
+    SET name = EXCLUDED.name, properties = EXCLUDED.properties
+"""
+
+EDGE = """
+INSERT INTO graph_edges (from_key, to_key, edge_type)
+VALUES (%(from_key)s, %(to_key)s, %(edge_type)s)
 ON CONFLICT (from_key, to_key, edge_type, source) DO NOTHING
 """
 
+STATUS_NODES = """
+SELECT node_type, count(*) FROM graph_nodes GROUP BY node_type ORDER BY node_type
+"""
 
-def report(conn, heading):
-    print(f"\n{heading}")
-    print("  nodes")
-    for row in conn.execute(
-        "SELECT node_type, count(*) FROM graph_nodes GROUP BY 1 ORDER BY 2 DESC"
-    ):
-        print(f"    {row[0]:<10} {row[1]:>5}")
-    print("  edges")
-    for row in conn.execute(
-        "SELECT edge_type, count(*) FROM graph_edges GROUP BY 1 ORDER BY 2 DESC"
-    ):
-        print(f"    {row[0]:<20} {row[1]:>5}")
-    totals = conn.execute(
-        "SELECT (SELECT count(*) FROM graph_nodes), (SELECT count(*) FROM graph_edges)"
-    ).fetchone()
-    print(f"  TOTAL       {totals[0]} nodes · {totals[1]} edges")
+STATUS_EDGES = """
+SELECT edge_type, count(*) FROM graph_edges GROUP BY edge_type ORDER BY edge_type
+"""
+
+SHARED = """
+SELECT n.node_type, n.name, count(DISTINCT e.from_key) AS films
+FROM graph_edges e
+JOIN graph_nodes n ON n.node_key = e.to_key
+GROUP BY n.node_type, n.name
+HAVING count(DISTINCT e.from_key) > 1
+ORDER BY films DESC, n.name
+LIMIT 12
+"""
+
+
+def facts(payload):
+    """One payload -> the nodes and edges it justifies. Pure: no database, no network.
+
+    Separated from the writing so the extraction can be read, and reasoned about, without
+    a connection open. It is also the only place that knows TMDB's field names.
+    """
+    nodes, edges = [], []
+    film = f"film:{payload['id']}"
+    nodes.append((film, "film", payload.get("title") or "?", {}))
+
+    for genre in payload.get("genres") or []:
+        key = f"genre:{genre['id']}"
+        nodes.append((key, "genre", genre["name"], {}))
+        edges.append((film, key, "HAS_GENRE"))
+
+    for keyword in (payload.get("keywords") or {}).get("keywords") or []:
+        key = f"keyword:{keyword['id']}"
+        nodes.append((key, "keyword", keyword["name"], {}))
+        edges.append((film, key, "HAS_KEYWORD"))
+
+    credits = payload.get("credits") or {}
+
+    # Top billing only. TMDB orders cast by `order`, which is the billing order, so the
+    # first ten are the people someone would actually name when describing the film.
+    cast = sorted(credits.get("cast") or [], key=lambda p: p.get("order", 999))
+    for person in cast[:TOP_CAST]:
+        key = f"person:{person['id']}"
+        nodes.append((key, "person", person["name"], {}))
+        edges.append((film, key, "ACTED_IN"))
+
+    for person in credits.get("crew") or []:
+        if person.get("job") not in DIRECTING_JOBS:
+            continue
+        key = f"person:{person['id']}"
+        nodes.append((key, "person", person["name"], {}))
+        edges.append((film, key, "DIRECTED"))
+
+    return nodes, edges
+
+
+def status(conn):
+    print("nodes")
+    for node_type, count in conn.execute(STATUS_NODES).fetchall():
+        print(f"  {node_type:10} {count:>5}")
+    print("edges")
+    for edge_type, count in conn.execute(STATUS_EDGES).fetchall():
+        print(f"  {edge_type:14} {count:>5}")
+
+    # THE ONLY NUMBER THAT SAYS WHETHER THE GRAPH IS WORTH HAVING.
+    # A graph's value is entirely in what is SHARED — a person, genre or keyword
+    # attached to exactly one film connects nothing and can answer no question.
+    shared = conn.execute(SHARED).fetchall()
+    print(f"\nthings connecting more than one film — this is where a graph earns its keep")
+    if not shared:
+        print("  none. Every node touches one film, so the graph connects nothing yet.")
+    for node_type, name, films in shared:
+        print(f"  {films:>2} films  {node_type:8} {name}")
 
 
 def main():
-    flag = sys.argv[1] if len(sys.argv) > 1 else ""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--status", action="store_true",
+                        help="report what is in the graph and write nothing")
+    args = parser.parse_args()
 
-    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-
-        if flag == "--status":
-            report(conn, "current graph")
+    with psycopg.connect(DATABASE_URL) as conn:
+        if args.status:
+            status(conn)
             return
 
-        if flag == "--remove":
-            # Edges first: they hold the foreign keys.
-            edges = conn.execute("DELETE FROM graph_edges").rowcount
-            nodes = conn.execute("DELETE FROM graph_nodes").rowcount
-            conn.commit()
-            print(f"removed {nodes} nodes and {edges} edges")
-            return
+        films = conn.execute(PAYLOADS).fetchall()
+        print(f"{len(films)} films\n")
 
-        rows = conn.execute(
-            "SELECT movie_id, source_id, raw_payload FROM movies "
-            "WHERE source = 'tmdb' ORDER BY movie_id"
-        ).fetchall()
-        print(f"read {len(rows)} film payloads from movies.raw_payload")
+        seen_nodes = set()
+        written_edges = 0
 
-        g = build_from_payloads(rows)
-        print(f"derived {len(g.nodes)} nodes and {len(g.edges)} edges in memory")
+        for movie_id, title, tmdb_id, payload in films:
+            nodes, edges = facts(payload)
 
-        conn.cursor().executemany(INSERT_NODE, [
-            (key, ntype, name, Json(props))
-            for key, (ntype, name, props) in g.nodes.items()
-        ])
-        conn.cursor().executemany(INSERT_EDGE, [
-            (frm, to, etype, Json(props), source, CONFIDENCE)
-            for (frm, to, etype, source), props in g.edges.items()
-        ])
+            for key, node_type, name, properties in nodes:
+                if key in seen_nodes:
+                    continue                       # already written this run
+                conn.execute(NODE, {"key": key, "type": node_type, "name": name,
+                                    "properties": psycopg.types.json.Json(properties)})
+                seen_nodes.add(key)
+
+            for from_key, to_key, edge_type in edges:
+                conn.execute(EDGE, {"from_key": from_key, "to_key": to_key,
+                                    "edge_type": edge_type})
+                written_edges += 1
+
+            print(f"  {movie_id:>3}  {title:34} {len(nodes):>3} nodes · "
+                  f"{len(edges):>3} edges")
+
         conn.commit()
-
-        report(conn, "after load")
+        print(f"\n{len(seen_nodes)} distinct nodes · {written_edges} edges offered\n")
+        status(conn)
 
 
 if __name__ == "__main__":

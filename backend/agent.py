@@ -56,54 +56,49 @@ load_dotenv()
 from backend.config import AGENT_MODEL      # noqa: E402,F401
 MAX_PASSES = 6          # backstop only; natural termination should fire long before
 
-SYSTEM_PROMPT = """You are MovieMotions, a film recommendation assistant.
+SYSTEM_PROMPT = """You are MovieMotions. You recommend films from a catalogue you can
+only reach through tools.
 
-You can only recommend films a tool has returned to you in this conversation. You have
-no other catalogue and no reliable memory of what films exist — never recommend a film
-from your own knowledge, however sure you feel.
+NEVER name a film unless a tool returned it in this conversation. You have no other
+catalogue and no reliable memory of what films exist.
 
-Pick the tool by what the user's sentence CONTAINS, not by what it is about:
-- a description of a mood, feeling or plot      -> search_films
-- one film named, and they want its details     -> lookup_film
-- a person's name, a genre, or "like <a film>"  -> find_films_by_fact
-When a sentence contains BOTH a named film and a description — "like Jurassic Park but
-more intense" — use search_films, put what that film FEELS LIKE into the query rather than
-what it is about, and set exclude_title to the named film. Searching for a film's subject
-matter can only find that film again.
+WHICH TOOL
+- They want to be GIVEN a film            -> search_films
+- They asked ABOUT a film they named      -> lookup_film
+A sentence with a film AND a description is ONE search_films call with similar_to and
+mood set together. Never two calls, never half of it.
 
-A fact is never a matter of degree. If the user names a director, an actor or a genre,
-find_films_by_fact is the only correct tool — search_films cannot answer those and will
-return confident nonsense if you ask it to.
+ARGUMENTS
+- mood: feeling words, slightly expanded. Not a sentence about films, just feelings.
+- max_runtime, min_year, max_year: set these ONLY if an actual NUMBER appears in the
+  user's message. Never otherwise. They delete films permanently, so a number you chose
+  yourself builds a wall the user never asked for and then hides the catalogue behind it.
+- If they give a vague limit and no number, DO NOT CALL ANY TOOL. Reply with one short
+  question asking for the number, and nothing else.
+- Set no argument they did not ask for.
 
-How to work:
-- When the user describes what they want to watch, call search_films with a clear
-  description of the film, not a copy of their words.
-- Read the scores on search_films results. If the top score is weak, say plainly that
-  nothing in the catalogue fits rather than offering the least-bad option.
-- find_films_by_fact returns NO scores, because there is nothing to be unsure about.
-  State its results plainly, never hedge them, and never re-check them with search_films. An honest "I don't have
-  anything like that" is a better answer than a confident wrong one.
-- If results look off-target, you may search once more with different wording.
-- DO NOT describe every result. The tool always returns five; most are filler. Name only
-  the films you would genuinely recommend — often one, sometimes two, sometimes NONE.
-  If you catch yourself writing "X is not really a match, but…", do not name X at all.
-  Saying "I don't have anything like that" is a complete and correct answer.
-- Never quote or repeat the extract. It is there so you know what is TRUE about a film,
-  not so you can paste it. Write your own short sentence in your own words.
-- EVERY result from EVERY tool carries a QUOTED EXTRACT from the film. Anything you say
-  about a film — what it is about, who is in it, how it feels — must come from ITS OWN
-  quote. Never describe a film from your own knowledge, even one you are certain about. If the quote does not support the
-  reason you want to give, give a reason it does support, or do not recommend the film.
-  Naming the right film for an invented reason is still wrong.
-- When you have what you need, name each film on ITS OWN LINE, one or two sentences each,
-  saying why it fits. No preamble, no bullet characters, no numbering.
-- Every sentence must be finished. Never write a placeholder, a trailing "because...",
-  an ellipsis standing in for content, or a template of what you were going to say.
-  If you cannot complete a sentence, delete it.
+READING THE RESULT
+- Each film carries a score and how far it sits above this query's floor. The floor is
+  what UNRELATED looks like for this query. A film sitting near it is not a weak match,
+  it is not a match.
+- Name only films clearly above the floor. Three if three are clear, two if two are, one
+  if one is, none if none are. "I do not have anything like that" is a complete answer.
+- Everything you say about a film must come from that film's own MATCHED line or its
+  PREMISE. Some matched text is withheld; you may rank on it and must not invent it.
+- If the results look off-target you may search once more with different wording. Twice
+  is enough.
 
-Never mention scores, tools, searches, or how you found anything. The user is asking
-for a film, not for a description of your machinery. Say "Predator is a good fit
-because..." — never "the top result has a relevance score of 0.317".
+WRITING THE ANSWER — these are mechanical rules, follow them exactly
+- The first characters you write are a film's title. There is no opening sentence.
+- One film per line, best first, at most three. No blank lines between them. No bold, no
+  asterisks, no bullets, no numbering, no headings.
+- One or two sentences per film, and they must say WHY IT FITS WHAT THEY ASKED FOR.
+- Do not retell the plot. The premise is given to you so you know what is TRUE about a
+  film, not so you can copy it back.
+- After the last film, stop. No closing sentence, no summary, no offer to search again.
+- Never mention tools, scores, searches, floors or anything about how you found the film.
+- Finish every sentence. No placeholders, no trailing "because...", no ellipsis standing
+  in for content. If you cannot finish a sentence, delete it.
 """
 
 llm = chat_model()
@@ -174,6 +169,28 @@ def think(state: MessagesState) -> dict:
     reply = llm_with_tools.invoke([SystemMessage(SYSTEM_PROMPT)] + state["messages"])
     if empty_reply(reply):
         reply = AIMessage(content=NO_ANSWER, id=reply.id)
+        return {"messages": [reply]}
+
+    # FORMATTING IS DETERMINISTIC, SO CODE OWNS IT.
+    #
+    # This lived in the critic until it was found to have never run once: the critic is
+    # switched off. A guarantee placed on an optional path is not a guarantee. It runs
+    # here instead, on every answer, whatever else is enabled.
+    #
+    # Only when the model has stopped asking for tools — a reply carrying tool_calls is
+    # a request, not an answer, and has no prose to tidy.
+    if not getattr(reply, "tool_calls", None):
+        visible = split_content(reply)[0]
+        lines = [ln for ln in visible.splitlines() if ln.strip()]
+        evidence = "\n\n".join(str(m.content) for m in state["messages"]
+                                if m.__class__.__name__ == "ToolMessage")
+        if lines and evidence.strip():
+            cleaned = strip_scaffolding(lines, evidence)
+            if cleaned != lines:
+                print(f"  [tidied {len(lines) - len(cleaned)} scaffolding line(s); "
+                      f"list markers removed]")
+                reply = AIMessage(content="\n".join(cleaned), id=reply.id)
+
     return {"messages": [reply]}
 
 
@@ -201,6 +218,56 @@ DRAFT
 Reply with ONLY the numbers of the unsupported lines, separated by commas.
 If every line is supported, reply with exactly: NONE
 Reply with nothing else — no explanation, no punctuation beyond the commas."""
+
+
+TITLE_IN_EVIDENCE = re.compile(r"^\s*\d+\.\s+(.+?)\s+\(\d{4}\)", re.M)
+LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*\u2022])\s+")
+
+
+def strip_scaffolding(lines, evidence):
+    """Drop opening and closing lines that name no film.
+
+    WHY THIS IS CODE AND NOT A PROMPT RULE
+        "Do not write an opening sentence" was stated three ways in three rewrites and
+        ignored every time. A small model reaches for a framing sentence the way anyone
+        does. Asking a fourth time was not going to work, and each attempt made the
+        prompt longer and displaced a rule that WAS holding.
+
+        So it is enforced the same way the critic is: the model writes, the code edits.
+        A line naming no film is scaffolding — "here are some films for you" at the top,
+        "both of these have a comedic twist" at the bottom. The second is the more
+        dangerous one: a summary is a claim no tool made, and it is the line most likely
+        to be the only untrue thing in the answer.
+
+    THE GUARD
+        A refusal names no film at all and is a correct, complete answer. If stripping
+        would empty the reply, nothing is stripped.
+    """
+    titles = set(TITLE_IN_EVIDENCE.findall(evidence))
+    if not titles:
+        return lines
+
+    def names_a_film(line):
+        return any(title.lower() in line.lower() for title in titles)
+
+    kept = [i for i, line in enumerate(lines) if names_a_film(line)]
+    if not kept:
+        return lines                       # a refusal, or nothing recognisable. Leave it.
+
+    # LEADING scaffolding only. Trimming the tail as well looked symmetrical and was
+    # wrong: the answer format is a title line followed by the sentence saying why it
+    # fits, so the LAST line naming a film is a title and everything after it — the
+    # reason for the final recommendation — was deleted as a closing summary. Seen in
+    # the browser on 7 Sep: every answer came back as a bare "Predator (1987)".
+    #
+    # A stray closing sentence is a much smaller problem than a deleted reason, and
+    # the critic exists to catch an unsupported summary if it ever runs.
+    trimmed = lines[kept[0]:]
+
+    # And drop list markers. The tool's own output is a numbered list, and the model
+    # copies whatever shape it is shown — the same reason a worked example in a prompt
+    # gets filled in rather than imitated.
+    return [LIST_MARKER.sub("", line) for line in trimmed]
 
 
 def critic(state: MessagesState) -> Command:
@@ -471,11 +538,25 @@ def run(question: str, show_trace: bool = True, decide=ask_human) -> str:
 
 
 if __name__ == "__main__":
-    questions = [
-        "I want something where creatures are hunting people, really tense",
-        "do you have a documentary about climate change?",
-    ]
-    for question in questions:
-        print(f"\n\n=== {question}\n")
-        answer = run(question)
-        print(f"\nANSWER: {answer}")
+    # A prompt you can TYPE AT, not a fixed list. The questions worth asking are the
+    # ones that occur to you while reading the last answer, and a hardcoded list can
+    # never contain those. Pass questions as arguments to run a fixed set instead.
+    import sys
+
+    print(f"MovieMotions · {AGENT_MODEL}")
+
+    if len(sys.argv) > 1:
+        for question in sys.argv[1:]:
+            print(f"\n\n=== {question}\n")
+            print(f"\nANSWER: {run(question)}")
+    else:
+        print("Ask for a film. Empty line to stop.\n")
+        while True:
+            try:
+                question = input("you> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not question:
+                break
+            print()
+            print(f"\nANSWER: {run(question)}\n")

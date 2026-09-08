@@ -38,9 +38,10 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
+import psycopg
+
 from backend.agent import AGENT_MODEL, MAX_PASSES, graph, split_content
-from backend import providers
-from backend.graph import availability, graph_film_titles
+from backend.config import DATABASE_URL
 from backend.retrieval import search
 
 # This file lives in backend/, so the repository root — where static/ and data/ sit —
@@ -52,11 +53,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(ROOT, "static")
 app = FastAPI(title="MovieMotions")
 
-# "1. Predator (1987) · 107 min · score 0.614 · matched on its plot text"
+# "1. Predator (1987) · 107 min · rank 1.00 · +0.103 over its band"
+#
+# THE STANDING TRAP IN THIS FILE. The tool answers a MODEL, so its output is prose —
+# that is the right call and it stays that way. But this regular expression is the only
+# thing connecting that prose to the screen, and nothing in the type system knows they
+# are related. Change a tool's wording and the panel silently empties: no error, no
+# crash. It has broken twice. If the display goes blank, look here first.
 FILM_LINE = re.compile(
-    r"^\s*(\d+)\.\s+(.*?)\s+\((\d{4}|----)\)\s+·\s+(.*?)\s+·\s+score\s+([\d.]+)"
-    r"\s+·\s+matched on its (\w+) text"
+    r"^\s*(\d+)\.\s+(.*?)\s+\((\d{4}|----)\)\s+·\s+(.*?)\s+·\s+rank\s+([\d.]+)"
 )
+EVIDENCE_LINE = re.compile(r"^\s+(MATCHED|FEELS|PREMISE)\s+(.*)$")
 
 
 def parse_films(text):
@@ -70,12 +77,26 @@ def parse_films(text):
     for line in text.splitlines():
         match = FILM_LINE.match(line)
         if match:
-            rank, title, year, runtime, score, source = match.groups()
-            current = {"rank": int(rank), "title": title, "year": year, "runtime": runtime,
-                       "score": float(score), "source": source, "evidence": ""}
+            place, title, year, runtime, rank = match.groups()
+            current = {"rank": int(place), "title": title, "year": year,
+                       "runtime": runtime, "score": float(rank), "source": "",
+                       "evidence": ""}
             films.append(current)
-        elif current is not None and line.strip().startswith('"'):
-            current["evidence"] = line.strip().strip('"')
+            continue
+        if current is None:
+            continue
+        found = EVIDENCE_LINE.match(line)
+        if not found:
+            continue
+        kind, body = found.groups()
+        if kind == "MATCHED" and not current["source"]:
+            current["source"] = body.split("—")[0].strip()
+        elif kind == "PREMISE" and not current["evidence"]:
+            # The premise, never the matched text: a scene or a theme can be what
+            # scored, and neither may be shown. Same rule as retrieval's DISPLAYABLE,
+            # and it has to hold here too or the spoiler reaches the screen by a
+            # different door.
+            current["evidence"] = body.strip()
     return films
 
 
@@ -205,7 +226,8 @@ class Retrieve(BaseModel):
 @app.post("/api/search")
 def raw_search(request: Retrieve):
     """Retrieval with no agent at all — for comparing what the model was given."""
-    return {"query": request.query, "results": search(request.query, request.limit)}
+    results, notes = search(mood=request.query, limit=request.limit)
+    return {"query": request.query, "results": results, "notes": notes}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -232,6 +254,35 @@ NEGATIONS = ("not ", "n't ", "other than", "besides", "except", "excluding",
 NEGATION_WINDOW = 40      # characters before the title to inspect
 
 
+FACTS = """
+SELECT title,
+       EXTRACT(YEAR FROM release_date)::int          AS year,
+       runtime_minutes,
+       tmdb_raw_payload ->> 'poster_path'            AS poster_path
+FROM movies
+WHERE title = ANY(%(titles)s)
+"""
+
+ALL_TITLES = "SELECT title FROM movies ORDER BY title"
+
+
+def catalogue_titles():
+    """Every title, for matching the agent's prose against what actually exists."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        return [row[0] for row in conn.execute(ALL_TITLES).fetchall()]
+
+
+def film_facts(titles):
+    """Title -> the facts the panel draws. Read from movies, which is the only place
+    they live now that the knowledge graph is gone."""
+    if not titles:
+        return {}
+    with psycopg.connect(DATABASE_URL) as conn:
+        rows = conn.execute(FACTS, {"titles": list(titles)}).fetchall()
+    return {r[0]: {"title": r[0], "year": r[1], "runtime_minutes": r[2],
+                   "poster_path": r[3]} for r in rows}
+
+
 def films_mentioned(answer, titles=None, exclude=()):
     """Which films does this answer actually RECOMMEND, in the order named?
 
@@ -243,7 +294,7 @@ def films_mentioned(answer, titles=None, exclude=()):
     # `titles` is injected by the tests so this can be checked without a database.
     # A function that reaches out and fetches its own input cannot be tested cheaply.
     if titles is None:
-        titles = graph_film_titles()
+        titles = catalogue_titles()
     titles = sorted(titles, key=len, reverse=True)
 
     lowered = answer.lower()
@@ -335,44 +386,38 @@ class Panel(BaseModel):
 
 @app.post("/api/panel")
 def panel(request: Panel):
-    """Everything the results panel draws: poster, the agent's reasons, banded offers."""
+    """Everything the results panel draws: poster, and the agent's own reasons.
+
+    NO OFFERS OR PRICES. The availability layer was deleted with the knowledge graph on
+    5 Sep and has not been rebuilt. The keys stay in the response with empty values
+    rather than disappearing, because the front end is typed against this shape and a
+    missing key is a blank screen while an empty list is an empty section.
+    """
     rows = []
     titles = films_mentioned(request.answer, exclude=request.exclude)
+    facts = film_facts(titles)
+
     for title in titles:
-        found = availability(title)
-        if not found["found"]:
-            continue
-        offers = [{
-            "display": o["display"],
-            "band": o["band"],
-            "band_label": providers.BAND_LABEL[o["band"]],
-            "price_text": o["price_text"],
-            "verified": o["verified"],
-            "note": o["note"],
-            "resold_from": o["resold_from"],
-            "logo_url": f"{TMDB_IMAGE}/{LOGO_SIZE}{o['logo_path']}" if o.get("logo_path") else None,
-        } for o in found["offers"]]
+        found = facts.get(title)
+        if not found:
+            continue                    # named by the agent but not in the catalogue
         rows.append({
             "title": found["title"],
-            "year": (found["release_date"] or "----")[:4],
+            "year": str(found["year"] or "----"),
             "runtime_minutes": found["runtime_minutes"],
             "poster_url": (f"{TMDB_IMAGE}/{POSTER_SIZE}{found['poster_path']}"
                            if found["poster_path"] else None),
             "reasons": reasons_for(request.answer, found["title"], titles),
-            "has_listing": found["has_listing"],
-            "region": found["region"],
-            "checked_on": found["checked_on"],
-            "stale_days": found["stale_days"],
-            "link": found["link"],
-            "offers": offers,
+
+            # Availability, parked. Present and empty, never absent.
+            "has_listing": False,
+            "region": None,
+            "checked_on": None,
+            "stale_days": None,
+            "link": None,
+            "offers": [],
         })
     return {"films": rows}
-
-
-@app.get("/api/availability/{title}")
-def one_film(title: str):
-    """Single film, for poking at by hand."""
-    return availability(title)
 
 
 # The built page asks the browser for /app/assets/index-<hash>.js and its stylesheet.

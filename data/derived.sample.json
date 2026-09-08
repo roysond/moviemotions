@@ -1,0 +1,37 @@
+[
+  {
+    "movie_id": 10,
+    "title": "Alien",
+    "mood_feel": "Uneasy, with a slow-burning tension that traps you inside the cold, industrial maze of the ship.",
+    "theme": "In the face of the unknown, corporate greed values profit over human life, treating people as expendable in the acquisition of a dangerous new asset.",
+    "premise": "The crew of a commercial space tug, on a long haul back to Earth, is awakened from stasis to investigate a mysterious transmission from a nearby moon. After one of the crew is attacked by an alien lifeform during the investigation, the science officer breaks quarantine to bring him back aboard, unwittingly trapping them all with an unknown horror."
+  },
+  {
+    "movie_id": 11,
+    "title": "The Shawshank Redemption",
+    "mood_feel": "Patient, watching small acts of dignity and quiet resistance accumulate over decades within the gray walls of a prison.",
+    "theme": "Hope is a vital tool for survival, allowing the human spirit to endure even in the most dehumanizing of circumstances.",
+    "premise": "In 1947, a successful banker is wrongly convicted for the murder of his wife and her lover and sentenced to serve two life sentences in the brutal Shawshank State Prison. Inside, he must navigate a violent and corrupt system while forming an unlikely friendship with a long-serving inmate who can procure goods from the outside."
+  },
+  {
+    "movie_id": 12,
+    "title": "Finding Nemo",
+    "mood_feel": "Anxious, swept along on a desperate journey through a vast and colorful world full of both wonder and danger.",
+    "theme": "The love of a parent can become a cage, and true care means finding the courage to let a child experience risk.",
+    "premise": "After a past tragedy makes him obsessively protective, a clownfish father's only son defies him by swimming into open water and is promptly captured by a diver. Now, the fearful father must brave the vast, unknown ocean to find him."
+  },
+  {
+    "movie_id": 17,
+    "title": "The Hangover",
+    "mood_feel": "Frantic, with a relentless pace that pulls you along on a desperate, sun-blasted search for answers.",
+    "theme": "A single night of absolute, forgotten abandon can reveal more about a person's character and friendships than a lifetime of responsible behavior.",
+    "premise": "Two days before his wedding, a man and his three groomsmen head to Las Vegas for a bachelor party. The next morning, the groomsmen wake up in their trashed hotel suite with pounding headaches, a tiger in the bathroom, a baby in the closet, and no memory of the night before—or any idea where the groom has gone."
+  },
+  {
+    "movie_id": 20,
+    "title": "Get Out",
+    "mood_feel": "Uneasy, with a creeping sense of dread that builds beneath a placid, sun-drenched surface.",
+    "theme": "The seemingly benign admiration of Black culture and physicality can mask a predatory desire to possess and erase the person within.",
+    "premise": "A Black photographer travels to his white girlfriend's secluded family estate to meet her parents for the first time. His initial anxieties about their reception give way to a growing dread as the family's unnervingly accommodating behavior and the strange, vacant demeanor of their Black servants suggest a sinister secret."
+  }
+]

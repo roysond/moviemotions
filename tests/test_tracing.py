@@ -23,12 +23,16 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The steps a person debugging a bad recommendation needs to see, one line each.
+# Rewritten 7 Sep 2026. The knowledge-graph module and three of retrieval's helpers
+# were deleted in the RAG rebuild, so this list named functions that do not exist and
+# the test failed for the wrong reason. A gate that fails because it is out of date
+# teaches people to ignore a red build.
+#
+# The rule it protects is unchanged: anything that leaves this machine, or decides
+# which films come back, must be visible in a trace. It was invisible for a week once.
 MUST_BE_TRACED = {
     "backend/models.py":    ["embed", "rerank"],
-    "backend/retrieval.py": ["search", "get_film", "_collapse_to_films",
-                             "excluded_by_filters"],
-    "backend/graph.py":     ["graph_find", "availability", "graph_genres",
-                             "graph_film_titles"],
+    "backend/retrieval.py": ["search"],
 }
 
 

@@ -1,652 +1,297 @@
-"""The tool registry — what the agent is allowed to do.
+"""What the agent is allowed to do.
 
-A TOOL IS TWO THINGS
-    1. A normal Python function. Ordinary code, nothing special.
-    2. A description written FOR THE MODEL. The model never sees the code — it reads
-       the name, the docstring and the argument types, then replies asking for the tool
-       by name. Our code decides whether to honour that request and runs it locally.
-       Nothing about the database, the credentials or the SQL ever leaves this machine.
+THE DOCSTRING IS THE INTERFACE
+    Only a tool's NAME, ARGUMENTS and DESCRIPTION travel to the model. The code never
+    leaves this machine. So everything the model must know — when to use a tool, when
+    NOT to, what a number means, how to phrase an argument — has to be written in prose
+    here, and nowhere else. A rule that lives in a comment is a rule the model cannot
+    read.
 
-SO THE DOCSTRING IS THE INTERFACE
-    It is prompt engineering aimed at a function signature. A vague description means a
-    tool that is never called, or called with nonsense. Each description here states:
-        - what it does
-        - WHEN to use it        (so it gets picked at the right moment)
-        - WHEN NOT to use it    (this prevents more errors than the previous line)
-        - what comes back       (so the model knows how to read the result)
+TWO TOOLS, AND WHY NOT THREE
+    A "similar to X" search was nearly its own tool. It is an ARGUMENT instead, because
+    "similar to Alien, but funnier" needs a comparison film AND a mood in the SAME call.
+    Two separate tools cannot express that sentence at all — the model would have to
+    pick one half and throw the other away. Where two tools would have to be called
+    together, they were always one tool.
 
-TWO KINDS OF ARGUMENT, AND THE WHOLE DESIGN IS IN THE SPLIT
-    `query` is SOFT MEANING — mood, situation, plot. No exact test exists for "tense", so
-    it goes to the embedding and the reranker, which judge by reading.
+    The two that remain key off different things in the sentence, so there is no
+    judgement call: search_films answers "find me something", lookup_film answers
+    "tell me about this one".
 
-    The rest are HARD CONSTRAINTS — runtime and year. Each has a yes/no test, so each goes
-    to a SQL WHERE clause and is enforced exactly. They are never embedded, because vectors
-    capture topic, not truth value: "under 2 hours" embeds as mood, and "not a cartoon"
-    embeds NEXT TO "a cartoon" — there is no minus sign in vector space.
+WHAT A SCORE IS NOT
+    Closeness, never correctness. Measured 7 Sep 2026: unrelated text scores about 0.64
+    in this embedding space and nothing ever scores below 0.6, so a fixed cut-off cannot
+    work. The GAP line in each result is the honest signal, and it is reported rather
+    than acted on — refusing is the agent's judgement to make.
 
-        the LLM EXTRACTS the constraint   (fuzzy: "I've only got 90 minutes" -> 90)
-        the DATABASE ENFORCES it          (exact: runtime_minutes <= 90)
-
-    Never ask the fuzzy machine a question the exact machine can answer.
+RUN
+    python -m backend.tools        the spec the model receives, then real calls
 """
 
-import re
-from typing import Optional
-
+import psycopg
 from langchain_core.tools import tool
 
-from backend import providers
-from backend.graph import availability, graph_find, graph_film_titles
-from backend.models import embed
-from backend.retrieval import excluded_by_filters, get_film, search
+from backend.config import DATABASE_URL
+from backend.retrieval import DISPLAYABLE, resolve_title, search
 
-MAX_RESULTS = 5
+# How to say a data_kind out loud, for the one line the model reads.
+KIND_NAME = {"mood_feel": "feel", "premise": "premise", "theme": "theme",
+             "plot_scene": "plot"}
 
+def render(results, notes):
+    """One block of text for the model. Evidence beside every claim.
 
-def names_a_real_film(wanted, titles):
-    """Would excluding this string remove anything at all?
+    Every film carries the sentence it MATCHED on and its spoiler-free premise, because
+    a tool that returns a film and no words leaves a gap, and a model fills gaps from
+    its training. That was learned twice on this project, a month apart.
 
-    Deliberately the SAME rule the SQL uses — a real title CONTAINS the string given,
-    so "Terminator 2" covers "Terminator 2: Judgment Day". If nothing contains it, the
-    exclusion cannot touch a single row, and an argument that cannot change the result
-    is not a filter; it is a claim about the world that nobody checked.
-
-    Pure on purpose: the database call stays outside, so this can be tested against a
-    handful of made-up titles with no credentials and no Postgres.
+    TWO CONSTRAINTS CAN MATCH THE SAME SENTENCE. "Like Alien" and "funny" both read a
+    film's one mood_feel row, so printing per constraint showed the identical sentence
+    twice and dropped the two DIFFERENT scores — the only part that was not identical.
+    The text is printed once, with every score that was measured against it.
     """
-    wanted = (wanted or "").strip().lower()
-    return bool(wanted) and any(wanted in title.lower() for title in titles)
-
-
-
-# ── the constraints, in the order they may be given up ────────────────────────
-# Not all constraints are equal, and treating them as one flat AND is what makes an
-# empty result useless. "A horror comedy under 90 minutes" is a REQUEST for a horror
-# comedy with a CONVENIENCE attached. If nothing satisfies both, the honest reply is
-# not "nothing found" — it is "there are horror comedies here, they all run longer,
-# shall I show them anyway?"
-#
-# So: length is surrendered first, then dates. Genre, cast and crew are never
-# surrendered — they are what was actually asked for. Give those up and the answer is
-# about a different film than the one requested.
-DROPPABLE = [
-    (("max_runtime", "min_runtime"), "the length limit"),
-    (("after_year", "before_year"), "the year range"),
-]
-KEPT = ("genre", "actor", "director")
-
-
-def genre_key(name):
-    """'Science Fiction' -> 'genre:science-fiction'. Must match pipeline/build_graph.py."""
-    return "genre:" + re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
-
-
-def relaxation_steps(asked):
-    """Which constraints could be given up, in order, given what was actually sent.
-
-    Returns a list of (keys_to_drop, plain_english_label), cumulative — step two also
-    drops step one. Pure: no database, so the precedence can be tested on a dict.
-    """
-    steps, dropping = [], []
-    for keys, label in DROPPABLE:
-        present = [k for k in keys if asked.get(k) is not None]
-        if not present:
-            continue
-        dropping = dropping + present
-        steps.append((tuple(dropping), label))
-    return steps
-
-
-def kept_description(asked):
-    """'genre=Horror, director=Jordan Peele' -> the words to say it back to the user."""
-    parts = [f"{k}={asked[k]}" for k in KEPT if asked.get(k) is not None]
-    return ", ".join(parts)
-
-
-
-def search_kwargs(active):
-    """Turn this tool's filter names into the ones `search()` actually accepts.
-
-    Only one name changes: the tool takes a human genre ("Science Fiction"), the SQL
-    takes its graph key ("genre:science-fiction"). Everything else passes straight
-    through.
-
-    A separate function, not three lines inside the tool, for one reason: the first
-    version popped 'genre' only when it had a value, so an unset genre stayed in the
-    dict and `search()` rejected the keyword it had never heard of. Every call failed.
-    Pure and named, it can be checked against the real signature by a test.
-    """
-    args = dict(active)
-    raw = args.pop("genre", None)
-    args["genre_key"] = genre_key(raw) if raw else None
-    return args
-
-
-
-def relaxation_message(label, kept, titles, capped):
-    """What to say when giving up one constraint would find something.
-
-    Two things this has to get right, both learned the hard way:
-
-    COUNT vs CAP. The search returns at most MAX_RESULTS, so a list of that length is a
-    FLOOR, not a total. "2 horror films" was true; "5 films" meant "five is where the
-    list stopped", and the same sentence shape said both.
-
-    NAMING vs RECOMMENDING. Titles are only worth listing when something was KEPT — a
-    genre, an actor, a director. With nothing kept, the relaxed search is the whole
-    catalogue in score order, and naming five of them presents an arbitrary slice as an
-    answer.
-    """
-    if not kept:
-        return (f"Nothing satisfies everything asked for, and {label} is the only thing "
-                f"ruling films out — the catalogue has films, none inside that limit. Tell "
-                f"the user exactly that and ASK whether to ignore it. Name no films yet: "
-                f"with nothing else asked for, any list here is just the catalogue, and "
-                f"reading it out would sound like a recommendation.")
-    how_many = f"at least {len(titles)}" if capped else f"{len(titles)}"
-    return (f"Nothing satisfies everything asked for. {label.capitalize()} is the blocker: "
-            f"without it there are {how_many} film(s) matching {kept} — "
-            f"{', '.join(titles)}.\n"
-            f"DO NOT recommend them yet. Tell the user those films exist, that they fail "
-            f"{label}, and ASK whether to ignore it. Only search again if they say yes.")
-
-
-@tool
-def search_films(
-    query: str,
-    max_runtime: Optional[int] = None,
-    min_runtime: Optional[int] = None,
-    after_year: Optional[int] = None,
-    before_year: Optional[int] = None,
-    exclude_title: Optional[str] = None,
-    genre: Optional[str] = None,
-    actor: Optional[str] = None,
-    director: Optional[str] = None,
-) -> str:
-    """Find films whose plot, mood or situation matches a natural-language description.
-
-    Use this whenever the user describes what they want to watch — a feeling
-    ("something cosy"), a situation ("creatures chasing people"), or a plot
-    ("a man wrongly imprisoned").
-
-    EXPAND what the user said into a fuller description before calling. Never send a
-    single word or a bare keyword — short queries score flat and rank nothing. Measured
-    on this catalogue:
-        query="cosy"                                  -> top score 0.08, spread 0.007
-                                                         (noise: Hangover, Predator)
-        query="a warm gentle feel-good film for a
-               rainy evening at home"                 -> top score 0.37
-                                                         (Finding Nemo, Crazy Stupid Love)
-    Same request, same corpus, four times the signal. The only difference was wording.
-
-    Aim for a full sentence naming the FEELING and the KIND OF STORY. Keep everything
-    the user said and add the words they implied. You may call this more than once with
-    different wordings if the first results look wrong.
-
-    Do NOT use this when the user NAMES a film ("tell me about Predator", "how long
-    is Titanic?") — use `lookup_film` for that. Do NOT use it to answer a question
-    about a film already discussed in this conversation, or for anything unrelated
-    to films — answer those directly instead.
-
-    ARGUMENTS
-    query: the mood, situation or plot ONLY, as a full descriptive phrase — never a
-        single word. Strip out any length or date wording and put it in the arguments
-        below instead, but do NOT strip anything else:
-            "something tense with creatures under two hours"
-              -> query="a tense, frightening film where dangerous creatures hunt
-                        and kill people", max_runtime=120
-    max_runtime / min_runtime: length in MINUTES. Translate the user's phrasing —
-        "under two hours" -> 120, "I've only got 90 minutes" -> 90, "nothing short"
-        -> min_runtime=100. Leave out entirely when the user says nothing about length.
-
-        NEVER CARRY A LENGTH OR YEAR FORWARD FROM AN EARLIER MESSAGE. A runtime limit
-        describes the REQUEST that stated it, not the person. A mood can persist across
-        a conversation; "under two hours" cannot. Asked "something fictional with magic"
-        after an earlier question that mentioned two hours, this tool was sent
-        max_runtime=120 — and the one film in the catalogue actually about magic runs
-        152 minutes, so it was removed before ranking and never had a chance. If the
-        CURRENT message says nothing about length, send no length.
-    after_year / before_year: four-digit years, inclusive. "something modern" or
-        "from the 90s" -> after_year=1990, before_year=1999. Leave out if not asked.
-    exclude_title: a film to keep OUT of the results, and ONLY ever a real film's
-        title. Set it when the user names a film they already know — "like Jurassic
-        Park", "similar to Alien", "another Terminator" — and wants to move past it.
-
-        THE WORD "LIKE" IS NOT THE TEST. What follows it usually is not a film.
-        "something like a bachelor's night out with rave parties" describes an
-        EVENING, not a movie; sending exclude_title="A Bachelor's Night Out" invents
-        a film that does not exist, and every sentence built on it is a sentence
-        about nothing. If you are not sure the words name a real film, leave this
-        out — an unset filter costs nothing, an invented one costs the truth.
-        The tool checks, and will tell you when you were wrong.
-
-    genre / actor / director: FACTS, checked in the knowledge graph before ranking.
-        Set them ONLY when the user names them. "show me a horror film" -> genre="Horror".
-        "something scary and lonely" -> genre=None; scary is a feeling, and a feeling
-        belongs in the query where the ranker can weigh it. Inferring a genre from a mood
-        and then enforcing it deletes the right answer before it can be scored.
-        genre must be one of the thirteen listed in `find_films_by_fact`, exactly.
-
-        These NARROW the pool before anything is ranked, which is their point and their
-        danger. Use them with a mood in `query` — "a horror film that feels lonely" is
-        genre + query together. If there is no mood at all, this is the wrong tool:
-        `find_films_by_fact` answers pure-fact questions without pretending to rank.
-
-    WHEN NOTHING SATISFIES EVERYTHING. The tool works out which constraint is to blame
-    and tells you. A length or year limit is a convenience and may be given up; a genre,
-    an actor or a director is the request itself and never is. When the tool says films
-    exist but fail one limit, ASK the user before showing them — do not decide for them
-    that the limit did not matter.
-
-    "SOMETHING LIKE <FILM>, BUT ..." — read this before writing the query.
-    Describe what the film IS LIKE TO WATCH, not what it contains. A film's subject
-    matter is unique to it, so searching for the subject can only find that one film
-    back. Its EXPERIENCE is shared with others, and others is what the user wants.
-
-        "like Jurassic Park but more intense, with gore"
-          WRONG  query="a thrilling intense film with dinosaur attacks and gore"
-                 -> dinosaurs exist in exactly one film here. Top result: Jurassic
-                    Park, the film they asked to move past. Everything else scores
-                    near zero because nothing else has dinosaurs.
-          RIGHT  query="a tense, frightening film where people are hunted by
-                        dangerous creatures",
-                 exclude_title="Jurassic Park"
-
-    Expand, but do not pile on. Every clause you add is a separate thing the ranker
-    can score, and a film can win on one while failing the other. Measured: adding
-    "and barely escape being killed" to the query above lifted Terminator 2 from 4th
-    to 2nd (0.304 -> 0.449) and left Alien flat — because a T-800 is not a creature,
-    but a shopping-mall chase is very much a narrow escape. One idea per query.
-
-    Only keep the subject matter when the USER asked for it — "another film with
-    dinosaurs" means dinosaurs; "something like Jurassic Park" means the feeling.
-
-    These are enforced exactly, so a film that comes back ALWAYS satisfies them —
-    never re-check or apologise for them, and never mention a film the tool did not
-    return just because you believe it would fit.
-
-    THE BOUNDARY WITH `find_films_by_fact`, now that both take a genre, an actor and a
-    director. It is not WHICH words appeared — it is whether a MOOD appeared with them.
-        "a horror film that feels lonely"  -> this tool, genre="Horror" + the mood
-        "show me a horror film"            -> find_films_by_fact. Nothing to rank.
-        "a tense Nolan film"               -> this tool, director + the mood
-        "anything by Nolan"                -> find_films_by_fact. Nothing to rank.
-    A ranked list with no mood to rank by is a list in arbitrary order wearing scores.
-
-    Each result carries the QUOTED TEXT that matched. Base everything you say about a
-    film on that quote. If the quote does not support a claim, do not make the claim —
-    naming the right film for an invented reason is still wrong.
-
-    Returns up to 5 films with relevance scores. Judge the results by the TOP
-    score and by the gap below it, not by how many rows came back — this tool
-    always returns something, so a list is not evidence of a match.
-        above ~0.40   a genuine match. Recommend it plainly.
-        0.25 to 0.40  UNCERTAIN. Do NOT refuse, and do NOT oversell. Offer the top
-                      one or two tentatively and say they are not a strong match:
-                      "nothing here is exactly that, but the closest is X".
-        below ~0.25   nothing in the catalogue fits. Say so plainly instead of
-                      offering weak suggestions.
-    A steep drop after the first result (e.g. 0.58 then 0.19) means only the
-    first one is real.
-    """
-    # IS THAT EVEN A FILM? The catalogue is a table, and "does this title exist in it"
-    # has one right answer — so it is not a question to leave with the model. On 30 Aug
-    # the phrase "something LIKE a bachelor's night out" produced
-    # exclude_title="A Bachelor's Night Out", and the answer was then written around
-    # excluding a film that has never existed. The argument itself was harmless: the SQL
-    # matched nothing. The sentence it caused was not.
-    #
-    # The test mirrors the SQL exactly — the exclusion fires when a real title CONTAINS
-    # the string given ("Terminator 2" excludes "Terminator 2: Judgment Day"). If no
-    # title contains it, the argument cannot affect one single row, which is the precise
-    # definition of meaningless. Drop it and say so, out loud, in the result.
-    unknown_exclusion = None
-    if exclude_title and not names_a_real_film(exclude_title, graph_film_titles()):
-        unknown_exclusion, exclude_title = exclude_title, None
-
-    filters = {
-        "genre": genre, "actor": actor, "director": director,
-        "max_runtime": max_runtime, "min_runtime": min_runtime,
-        "after_year": after_year, "before_year": before_year,
-        # Was declared in the signature and the docstring, enforced in SQL, and NOT
-        # passed through these six lines — so the model set it, the tool accepted it,
-        # and the excluded film came back anyway. A silently ignored argument is worse
-        # than a missing one: everything reports success.
-        "exclude_title": exclude_title,
-    }
-    asked = {k: v for k, v in filters.items() if v is not None}
-
-    def run(active):
-        return search(query, limit=MAX_RESULTS, query_vector=vector,
-                      **search_kwargs(active))
-
-    # Embedded ONCE, up here, because an empty result is retried with fewer filters and
-    # the vector does not change between those attempts. Re-embedding per attempt would
-    # pay Bedrock three times for the same sentence.
-    vector = str(embed(query))
-    films = run(filters)
-
-    if not films:
-        # A filter emptying the pool and a description matching nothing are DIFFERENT
-        # failures and need different replies, so the tool result says which one happened.
-        # The invented-title note has to appear on THIS path as well: an empty result is
-        # exactly when the model reaches for a reason, and "I excluded X" is the wrong one.
-        if unknown_exclusion:
-            return (f'exclude_title="{unknown_exclusion}" is NOT a film in this catalogue '
-                    f'and was ignored — those words were a description, not a title, and '
-                    f'the user named no film. Nothing then matched the description either. '
-                    f'Say that plainly and do not mention the excluded title at all.')
-        if asked:
-            # Which constraint is actually blocking? Give up the droppable ones in
-            # order and stop at the first attempt that finds something. That answer —
-            # "these exist, but they fail X" — is worth three cheap queries.
-            for dropping, label in relaxation_steps(asked):
-                relaxed = {k: (None if k in dropping else v) for k, v in filters.items()}
-                found = run(relaxed)
-                if found:
-                    return relaxation_message(
-                        label, kept_description(asked),
-                        [f["title"] for f in found], capped=len(found) >= MAX_RESULTS)
-            kept = kept_description(asked)
-            if kept:
-                return (f"No film in this catalogue matches {kept} at all — not one, before "
-                        f"any other limit was applied. Say that plainly. Do not offer to "
-                        f"relax the length or the year, because they are not the problem.")
-            return ("No films at all satisfy those hard constraints "
-                    f"({', '.join(f'{k}={v}' for k, v in asked.items())}). "
-                    "The limits ruled everything out, not the description — tell the user "
-                    "plainly and offer to relax the limit. Do not search again unchanged.")
-        return "No films found."
-
     lines = []
-    if unknown_exclusion:
-        lines.append(
-            f'exclude_title="{unknown_exclusion}" is NOT a film in this catalogue, so it '
-            f'was ignored. Those words were a description in the user\'s message, not a '
-            f'title — the user never named a film. Do not mention it, do not apologise '
-            f'for it, and do not present it as something that was excluded.')
-    if asked:
-        lines.append("filters enforced: " + ", ".join(f"{k}={v}" for k, v in asked.items()))
+    if not results:
+        lines.append("No films matched.")
+    else:
+        # "best first" is a CLAIM. It is true of a ranked result and false of a listed
+        # one, and a header that contradicts the note below it is the same failure as a
+        # trace describing a pipeline that no longer runs.
+        if results[0].get("listed_only"):
+            lines.append(f"{len(results)} films carrying that fact, in no "
+                         f"meaningful order.")
+        else:
+            lines.append(f"{len(results)} films, best first.")
+        for n, film in enumerate(results, 1):
+            lines.append("")
+            # rank is what ORDERED the films; raw and the margin are what say
+            # whether any of them is actually good. Both are printed because rank
+            # alone always makes the winner look perfect.
+            head = (f'{n}. {film["title"]} ({film["year"]}) · '
+                    f'{film["runtime_minutes"]} min')
+            if film.get("listed_only"):
+                # No score at all, deliberately. A number here would invent a
+                # confidence nobody measured.
+                lines.append(head)
+                shown = film.get("show", {})
+                if shown.get("mood_feel"):
+                    lines.append(f'   FEELS   {shown["mood_feel"]}')
+                if shown.get("premise"):
+                    lines.append(f'   PREMISE {shown["premise"]}')
+                continue
+            if "rerank" in film:
+                # The number that actually decided this order. Shown FIRST because a
+                # reader — model or person — takes the first figure as the verdict, and
+                # after a rerank the vector numbers are history, not the decision.
+                head += f' · relevance {film["rerank"]:.3f}'
+                head += f' (vector had it #{film["vector_place"]})'
+            else:
+                head += f' · rank {film["score"]:.2f}'
+                if "over_floor" in film:
+                    head += f' · {film["over_floor"]:+.3f} over its band'
+            lines.append(head)
 
-    # A hard filter removes films BEFORE ranking, so a spurious one does not make the
-    # results worse in a visible way — it deletes the right answer silently. Name the
-    # casualties so the loss is legible to you and to the model.
-    lost = excluded_by_filters(max_runtime=max_runtime, min_runtime=min_runtime,
-                               after_year=after_year, before_year=before_year)
-    if lost:
-        named = ", ".join(
-            f"{film['title']} ({film['runtime_minutes']} min)" for film in lost[:6])
-        lines.append(
-            f"those limits removed {len(lost)} film(s) from the pool before ranking: "
-            f"{named}{' …' if len(lost) > 6 else ''}. "
-            f"That is correct and expected IF the user asked for the limit — in that case "
-            f"say nothing about it and do not apologise. Only if the limit was never asked "
-            f"for in the current message is it wrong, and then it should be dropped.")
-    for rank, film in enumerate(films, start=1):
-        year = (film["release_date"] or "----")[:4]
-        runtime = f"{film['runtime_minutes']} min" if film["runtime_minutes"] else "? min"
-        lines.append(
-            f"{rank}. {film['title']} ({year}) · {runtime} · score {film['score']:.3f}"
-            f" · matched on its {film['source']} text"
-        )
-        if film.get("evidence"):
-            lines.append(f'   "{film["evidence"]}"')
+            scores = film.get("per_constraint", {})
+
+            def measured(label):
+                hit = scores[label]
+                return (f'rank {hit["rank"]:.2f} among text of that kind, '
+                        f'raw {hit["raw"]:.3f}')
+
+            for label, kind in film.get("matched_kind", {}).items():
+                where = KIND_NAME.get(kind, kind)
+                lines.append(f"   MATCHED {label} — on its {where}, {measured(label)}")
+            for label in film.get("matched_unseen", []):
+                lines.append(
+                    f"   MATCHED {label} — {measured(label)} — on text that is "
+                    f"withheld because it gives away endings. Rank on it. Do not "
+                    f"describe the film from it and do not invent what it said.")
+
+            # BOTH surfaces, every time, whichever constraint did the matching. A film
+            # returned with only its premise leaves nothing to say except the plot,
+            # and "say why it fits, do not retell the plot" is then an impossible
+            # instruction. FEELS is what an answer is written from; PREMISE is what
+            # keeps it true.
+            shown = film.get("show", {})
+            if shown.get("mood_feel"):
+                lines.append(f'   FEELS   {shown["mood_feel"]}')
+            if shown.get("premise"):
+                lines.append(f'   PREMISE {shown["premise"]}')
+
+    if notes:
+        lines.append("")
+        lines.append("NOTES")
+        lines += [f"- {note}" for note in notes]
     return "\n".join(lines)
 
 
-# Everything the agent may do. Adding a capability = adding to this list, nowhere else.
-@tool
+def search_films(mood: str = "", situation: str = "", theme: str = "",
+                 similar_to: str = "", director: str = "", actor: str = "",
+                 genre: str = "", max_runtime: int | None = None,
+                 min_year: int | None = None, max_year: int | None = None) -> str:
+    """Find films by how they FEEL, what happens in them, or by naming one the user liked.
+
+    Use this whenever the user is asking to be given a film. Fill in only the arguments
+    their sentence actually supports and leave the rest empty — an argument you invent
+    is a requirement they never stated, and every one of them narrows the search.
+
+    mood
+        How they want the film to FEEL, in FEELING WORDS. "Warm and comforting, cosy",
+        not "a warm gentle feel-good film for a rainy evening" — the stored text is one
+        tight sentence about a feeling, so words like "film", "movie" and "evening"
+        dilute the query rather than sharpen it. Expand a one-word request into a few
+        feeling words. Do not pad it into a paragraph.
+
+    situation
+        What actually HAPPENS. "A group trapped somewhere with no way out." Use this
+        when they describe events rather than a feeling. It searches both a film's
+        opening setup and its individual scenes, so it can find a moment from the middle
+        of a film, not only films that begin that way. Some of what it matches on cannot
+        be shown to you, because a scene from late in a film gives the ending away.
+
+    theme
+        What the film is about UNDERNEATH, when they ask for that specifically: "films
+        about the illusion of control". Leave empty otherwise. It is a weak signal on
+        its own — abstract sentences resemble each other — so never set it as a guess.
+
+    similar_to
+        The EXACT TITLE of a film they named as a reference point. This searches by what
+        that film feels like, and excludes the film itself and its sequels.
+        A sentence with both a film and a description — "like Alien, but funnier" — sets
+        similar_to AND mood, in one call. Both must be satisfied, so expect lower scores
+        and a smaller field; that is the request being hard, not the search failing.
+
+    director, actor, genre
+        A FACT, not a feeling. Set these when the user names a person or a genre, and
+        never as a guess. They are checked against a knowledge graph, so the answer is
+        yes or no — a director either made a film or did not — and films without that
+        edge are removed before anything is ranked.
+        Never put a person's name or a genre into `mood` or `situation` instead. A vector
+        would return films that FEEL like that person's work, which is a different
+        question answered confidently and wrongly.
+        A name that is not in the catalogue is reported as a plain fact. That is not a
+        weak match to work around — the name is simply not here, so say so.
+
+    max_runtime, min_year, max_year
+        Only when stated out loud. These are enforced exactly and delete films that do
+        not qualify, so a limit you assumed can remove the one right answer and leave no
+        trace. "Nothing too long" is not a number. Ask rather than guess.
+
+    Returns each film with the sentence it matched on, its spoiler-free premise, and a
+    NOTES block. Read the NOTES: they say what the filters removed and how far the top
+    film stood above the rest of the field. A small gap means nothing genuinely stood
+    out, and saying so plainly is a better answer than the least-bad film.
+
+    Do NOT use this to look up a film the user already named and simply wants details
+    about — that is lookup_film.
+    """
+    results, notes = search(
+        mood=mood or None, situation=situation or None, theme=theme or None,
+        similar_to=similar_to or None, director=director or None,
+        actor=actor or None, genre=genre or None, max_runtime=max_runtime,
+        min_year=min_year, max_year=max_year, limit=5)
+    return render(results, notes)
+
+
 def lookup_film(title: str) -> str:
-    """Look up ONE film the user has named, and return its facts.
+    """Tell the user about ONE film they have already named. No searching, no ranking.
 
-    Use this whenever the user mentions a film BY NAME — "tell me about Predator",
-    "how long is Titanic?", "is Alien in your catalogue?", "what year was Rocky?".
-    A partial name is fine: "Terminator 2" finds "Terminator 2: Judgment Day".
+    Use this when the sentence is ABOUT a film — "what is Alien about", "how long is
+    Titanic" — rather than a request to be given one.
 
-    Do NOT use this when the user describes what they want without naming it
-    ("something tense with creatures") — that is `search_films`. The rule is simple:
-        did the user say a TITLE?  -> lookup_film
-        did the user say a MOOD, SITUATION or PLOT?  -> search_films
+    If the title is not in the catalogue, or matches several films, that is said plainly.
+    Neither is an error and neither is answered by guessing: ask which one they meant.
 
-    This is an exact database lookup, not a similarity search, so anything it returns
-    IS in the catalogue and anything it does not return is NOT. If it comes back empty,
-    the film genuinely is not here — say so plainly and do not search for it instead.
+    Do NOT use this to find films LIKE the one named. That is search_films with
+    similar_to.
     """
-    films = get_film(title)
-    if not films:
-        return (f"'{title}' is not in the catalogue. This was an exact lookup, not a "
-                f"guess, so the film really is absent — tell the user plainly. Do not "
-                f"call search_films to look for it.")
-    lines = []
-    for film in films:
-        year = (film["release_date"] or "????")[:4]
-        lines.append(f"{film['title']} ({year}) · {film['runtime_minutes']} min")
-        if film["overview"]:
-            lines.append(f"    {film['overview']}")
+    return _one_film(title)
+
+
+ONE = """
+SELECT m.title, EXTRACT(YEAR FROM m.release_date)::int, m.runtime_minutes,
+       d.data_kind, d.content
+FROM movies m
+LEFT JOIN movie_data d ON d.movie_id = m.movie_id AND d.seq = 0
+WHERE lower(m.title) = lower(%(title)s)
+"""
+
+
+def _one_film(title):
+    """The film's own facts and its spoiler-free text. Never its theme — see retrieval.
+
+    DISPLAYABLE is imported rather than re-listed. Two files that each decide for
+    themselves what may be shown will eventually disagree, and the one that gets it
+    wrong prints a spoiler.
+    """
+    with psycopg.connect(DATABASE_URL) as conn:
+        found, problem = resolve_title(conn, title)
+        if problem:
+            return problem
+        rows = conn.execute(ONE, {"title": found[1]}).fetchall()
+
+    if not rows:
+        return f"{title!r} is not in the catalogue."
+
+    name, year, runtime, _, _ = rows[0]
+    text = {kind: content for _, _, _, kind, content in rows
+            if kind in DISPLAYABLE}
+    lines = [f"{name} ({year}) · {runtime} min"]
+    if "premise" in text:
+        lines.append(f"   PREMISE {text['premise']}")
+    if "mood_feel" in text:
+        lines.append(f"   FEELS   {text['mood_feel']}")
     return "\n".join(lines)
 
 
-@tool
-def find_films_by_fact(
-    director: Optional[str] = None,
-    actor: Optional[str] = None,
-    genre: Optional[str] = None,
-    similar_to: Optional[str] = None,
-) -> str:
-    """Look films up by FACT — who made them, who is in them, what genre they are, or
-    what else is like a named film. Exact database lookup, no scores, no guessing.
+# ── TRANSPORTS ────────────────────────────────────────────────────────────────
+# The two functions above are PLAIN PYTHON. They do not import LangChain, they do not
+# know what MCP is, and they return a string. Each way of reaching them wraps them here.
+#
+# That is the whole point: `backend/mcp_server.py` exposes the SAME functions to any
+# MCP client without a second definition. A tool defined twice is a tool that will
+# eventually behave two ways, and the divergence shows up in whichever transport nobody
+# is testing that week.
+SEARCH_FILMS = tool(search_films)
+LOOKUP_FILM = tool(lookup_film)
 
-    Use this when the user names a PERSON, a GENRE, or an existing film AND says nothing
-    about how they want to feel. The moment a mood is attached — "a horror film that
-    feels lonely", "a tense Nolan film" — it is `search_films`, which takes the same
-    genre/actor/director arguments AND has something to rank with. Facts alone come here:
-        "anything by Christopher Nolan"        -> director="Christopher Nolan"
-        "films with Arnold Schwarzenegger"     -> actor="Arnold Schwarzenegger"
-        "show me a horror film"                -> genre="Horror"
-        "something like Inception"             -> similar_to="Inception"
-        "a Nolan action film"                  -> director="Christopher Nolan", genre="Action"
-
-    Every argument you supply is combined with AND, so supplying two narrows the result.
-    Supply only what the user actually said.
-
-    WHEN NOT TO USE IT. If the user describes a FEELING, a MOOD or a PLOT rather than
-    naming something — "something tense", "a film about a wrongly imprisoned man" — that
-    is `search_films`. If the user names ONE film and wants ITS details — "how long is
-    Titanic?" — that is `lookup_film`. The rule:
-        a description        -> search_films
-        one title, its facts -> lookup_film
-        a name or a category -> this tool
-
-    genre MUST be one of these exactly, and there are no others in this catalogue:
-        Action · Adventure · Animation · Comedy · Crime · Drama · Family
-        Fantasy · Horror · Mystery · Romance · Science Fiction · Thriller
-    If the user asks for a genre not on that list, say plainly that the catalogue does
-    not have it. Do not substitute a near-miss.
-
-    WHAT COMES BACK, and how to read it. Each film carries the QUOTED TEXT of its own
-    description. Everything you say about a film must come from ITS quote. Do not describe
-    a film from your own knowledge, however sure you are — if the quote does not support
-    the sentence you want to write, write a different sentence or say nothing about it.
-    There are no relevance scores here because
-    there is nothing to be unsure about — a person either directed a film or did not.
-    Everything returned satisfies every filter exactly, so state it plainly and never
-    hedge. Three distinct empty answers, which must NOT be reported the same way:
-        "not in this catalogue"   the person, genre or film is absent entirely. Say so.
-        "no film matches all"     each filter exists, but nothing satisfies them together.
-                                  Say which combination failed and offer to drop one.
-        a list                    these are facts. Do not re-check them, do not apologise
-                                  for them, and do not add films the tool did not return.
-    Never call `search_films` to double-check this result. This IS the exact answer.
-    """
-    asked = {k: v for k, v in (("director", director), ("actor", actor),
-                               ("genre", genre), ("similar_to", similar_to)) if v}
-    if not asked:
-        return ("No filter was given. Supply at least one of director, actor, genre or "
-                "similar_to — or use search_films if the user described a mood or plot.")
-
-    result = graph_find(**asked)
-
-    if result["unknown"]:
-        field, value = next(iter(result["unknown"].items()))
-        noun = {"director": "director", "actor": "actor",
-                "genre": "genre", "similar_to": "film"}[field]
-        return (f"'{value}' is not in this catalogue as a {noun}. This was an exact "
-                f"lookup, not a guess, so it genuinely is absent — tell the user plainly. "
-                f"Do not call search_films to look for it.")
-
-    if not result["films"]:
-        return ("Each of those exists in the catalogue, but no single film satisfies all "
-                f"of them at once ({', '.join(f'{k}={v}' for k, v in asked.items())}). "
-                "Tell the user which combination came up empty and offer to drop one.")
-
-    lines = ["exact match on: " + ", ".join(f"{k}={v}" for k, v in asked.items())]
-    for film in result["films"]:
-        year = (film["release_date"] or "----")[:4]
-        runtime = f"{film['runtime_minutes']} min" if film["runtime_minutes"] else "? min"
-        lines.append(f"{film['title']} ({year}) · {runtime} · {'; '.join(film['why'])[:120]}")
-        if film.get("evidence"):
-            lines.append(f'   "{film["evidence"]}"')
-    return "\n".join(lines)
-
-
-@tool
-def check_availability(title: str) -> str:
-    """Where ONE named film can be watched right now, and what each way costs.
-
-    Use this whenever the user asks about WATCHING or PAYING rather than about the
-    film itself:
-        "where can I watch Predator?"            -> title="Predator"
-        "is Alien on Netflix?"                   -> title="Alien"
-        "how much to rent Terminator 2?"         -> title="Terminator 2"
-        "anything here I can watch for free?"    -> call this once per candidate film
-
-    WHEN NOT TO USE IT. The boundary against the other three tools is what the user
-    is asking ABOUT, not whether they said a title:
-        what the film IS      — year, length, plot   -> lookup_film
-        a mood, plot or feeling                      -> search_films
-        a person, a genre, or "something like X"     -> find_films_by_fact
-        where to watch it, or what it costs          -> this tool
-
-    After recommending films, calling this for each one is correct and expected — a
-    recommendation the user cannot act on is only half an answer.
-
-    WHAT COMES BACK. Offers grouped into bands, cheapest first inside each band:
-        Free · Included in a subscription · Rent · Buy · Needs a TV provider login
-    Bands are never mixed, because a one-off $3.99 rental and a $12.99 monthly
-    subscription are not the same kind of cost and must not be ranked against
-    each other.
-
-    HOW TO REPORT IT — four rules, and breaking any of them makes the answer wrong:
-      1. Name only services this tool listed. Never add one you believe carries the
-         film. Your training is out of date about streaming rights by definition.
-      2. Quote prices exactly as written. "from $3.99" means a typical price for an
-         older title, not this film's price — keep the word "from". A line reading
-         "price unknown" must be reported as unknown, never dropped and never guessed.
-      3. Availability is a snapshot, not live. Say when it was checked and offer the
-         verification link. This is the most perishable fact in the catalogue.
-      4. Do not tell the user a film is unavailable when the answer is that we hold
-         no data. Those are different sentences.
-
-    FOUR DISTINCT EMPTY ANSWERS. Reporting any of them as another is a lie:
-        "not in this catalogue"     the film is absent entirely
-        "no listing held"           the film is here, we have no data for this country
-        "no subscription"           listings exist, but none of them is a subscription
-        a list                      these are facts; state them plainly
-    """
-    result = availability(title)
-
-    if not result["found"]:
-        return (f"'{title}' is not in the catalogue, so there is nothing to check. "
-                f"This was an exact lookup, not a guess. Tell the user the film is "
-                f"absent — do NOT say it is unavailable to watch, which is a different "
-                f"thing, and do not call search_films to look for it.")
-
-    if not result["has_listing"]:
-        return (f"{result['title']} is in the catalogue, but we hold NO "
-                f"{result['region']} availability data for it. Say exactly that. Do "
-                f"not say it is unavailable — we do not know that. Offer the user "
-                f"{result['link'] or 'a streaming search'} to check for themselves.")
-
-    lines = [f"{result['title']} — where to watch in {result['region']}",
-             f"availability and prices last checked {result['checked_on']} "
-             f"({result['stale_days']} days ago); rights change weekly"]
-
-    band = None
-    for offer in result["offers"]:
-        if offer["band"] != band:
-            band = offer["band"]
-            lines.append(f"  {providers.BAND_LABEL[band]}:")
-        via = f" (sold through {offer['resold_from']})" if offer["resold_from"] else ""
-        note = f" — {offer['note']}" if offer["note"] else ""
-        lines.append(f"    {offer['display']}{via}: {offer['price_text']}{note}")
-
-    if not any(o["band"] == "subscription" for o in result["offers"]):
-        lines.append("  NOTE: nothing here is included in a subscription. If the user "
-                     "asked about streaming, say plainly that it is rent-or-buy only.")
-
-    if result["link"]:
-        lines.append(f"  verify current availability: {result['link']}")
-
-    return "\n".join(lines)
-
-
-TOOLS = [search_films, lookup_film, find_films_by_fact, check_availability]
+TOOLS = [SEARCH_FILMS, LOOKUP_FILM]
 
 
 if __name__ == "__main__":
-    # Self-test: no agent, no LLM. Prove the tool works and show what the model will read.
-    print("=" * 74)
-    print("THE SPEC THE MODEL RECEIVES  (this is all it knows about your code)")
-    print("=" * 74)
-    for t in TOOLS:
-        print(f"\nname:        {t.name}")
-        print(f"input schema: {t.args}")
-        print("description:")
-        for line in t.description.split("\n"):
-            print(f"    {line}")
+    print("=" * 78)
+    print("THE SPEC THE MODEL RECEIVES — this text, and nothing else, is what it reads")
+    print("=" * 78)
+    for spec in TOOLS:
+        print(f"\n\n### {spec.name}{spec.args}\n")
+        print(spec.description)
 
-    print("\n" + "=" * 74)
-    print("CALLING IT DIRECTLY  (exactly what the agent will do on your behalf)")
-    print("=" * 74)
-    probes = [
-        {"query": "a father and son separated and trying to find each other"},
-        {"query": "tense, creatures hunting people", "max_runtime": 120},
-        {"query": "anything at all", "max_runtime": 30},          # filter empties the pool
-        # The 30 Aug hallucination, reproduced on purpose. The tool must drop the
-        # invented title and SAY it dropped it — a silent drop teaches the model nothing.
-        {"query": "a wild, fun adventure with rave parties and madness",
-         "exclude_title": "A Bachelor's Night Out"},
-        # And the guard must not over-reject: a real title, shortened, still excludes.
-        {"query": "a tense film where people are hunted by something dangerous",
-         "exclude_title": "Terminator 2"},
-        # GRAPH GATE. The pool is narrowed by an edge before anything is ranked.
-        {"query": "a frightening film about being trapped somewhere", "genre": "Horror"},
-        {"query": "a tense, clever film", "director": "Christopher Nolan"},
-        # PRECEDENCE. Both horror films here run over 90 minutes, so this must NOT say
-        # "nothing found" — it must name the length as the blocker and offer the trade.
-        {"query": "something frightening", "genre": "Horror", "max_runtime": 90},
-        # And a genre nothing has: the length is not the problem, so do not offer it.
-        {"query": "anything at all", "genre": "Western"},
-    ]
-    for kwargs in probes:
-        print(f"\ncall: search_films({kwargs})")
-        print(search_films.invoke(kwargs))
+    print("\n\n" + "=" * 78)
+    print("REAL CALLS")
+    print("=" * 78)
+    for call in [
+        {"mood": "warm and comforting, cosy"},
+        {"similar_to": "Toy Story"},
+        {"similar_to": "Alien", "mood": "funny and light-hearted"},
+        {"mood": "funny and chaotic", "max_runtime": 100},
 
-    for probe in ["Predator", "Terminator 2", "The Godfather"]:
-        print(f"\ncall: lookup_film({{'title': '{probe}'}})")
-        print(lookup_film.invoke({"title": probe}))
+        # SITUATION — the only calls that can reach a plot scene. Without these the
+        # self-test never touches 148 of the 208 rows in the table, and adding a whole
+        # corpus that nothing exercises is how you get a feature nobody notices is dead.
+        {"situation": "a group trapped somewhere with no way out"},
+        {"situation": "someone hunted through a jungle"},
+        {"situation": "a child left alone in a house"},
+        {"situation": "a prisoner digging a tunnel"},
 
-    for kwargs in ({"director": "Christopher Nolan"},
-                   {"actor": "Arnold Schwarzenegger"},
-                   {"genre": "Horror"},
-                   {"director": "Christopher Nolan", "genre": "Comedy"},
-                   {"similar_to": "Inception"},
-                   {"director": "Quentin Tarantino"}):
-        print(f"\ncall: find_films_by_fact({kwargs})")
-        print(find_films_by_fact.invoke(kwargs))
+        # THE GRAPH — questions a vector cannot answer at all, only a fact can.
+        {"genre": "Science Fiction", "mood": "uneasy, dread"},
+        {"director": "Nolan"},
+        {"actor": "Schwarzenegger"},
+        {"director": "Kurosawa"},          # not in the catalogue — must say so plainly
+    ]:
+        print(f"\n\n--- search_films({call})\n")
+        print(search_films(**call))
 
-    # Four films, four different shapes of answer: a rich listing, a rent-or-buy
-    # only film, a film with free options, and one that is not here at all.
-    for probe in ["Predator", "Alien", "Terminator 2", "The Seventh Seal"]:
-        print(f"\ncall: check_availability({{'title': '{probe}'}})")
-        print(check_availability.invoke({"title": probe}))
+    for title in ["Alien", "alien", "Karate", "Jaws"]:
+        print(f"\n\n--- lookup_film({title!r})\n")
+        print(lookup_film(title))
