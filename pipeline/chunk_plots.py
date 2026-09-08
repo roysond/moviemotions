@@ -1,358 +1,313 @@
-"""Split Wikipedia plots into scene-sized chunks — SEMANTIC → RECURSIVE → OVERLAP.
+"""Cut each Wikipedia plot into scenes and store them as movie_data rows.
 
-WHY THIS EXISTS
-    A TMDB overview is ~350 characters and names no scene, so "creatures chasing people"
-    or "a father and son separated" had nothing concrete to match. A Wikipedia plot is
-    ~4,000 characters and narrates 20+ scenes. But a single vector over 4,000 characters
-    averages every scene into mush — so the plot must be SPLIT, and split in the right
-    places.
+WHY CHUNK AT ALL
+    A whole plot is 3,000 characters covering a dozen unrelated events. Embedded as one
+    vector it becomes an average of everything and matches nothing sharply. Cut into
+    scenes, a query about one moment can find the one paragraph that contains it — and
+    the film is still what gets returned. Small chunks match precisely; people want the
+    film, not the paragraph.
 
-THE HYBRID STRATEGY — three passes, each covering the previous one's blind spot
-    1. SEMANTIC proposes.  Every sentence is embedded; the distance between neighbouring
-       sentences is measured; a boundary lands where meaning SHIFTS. Chunking by meaning,
-       not by a character count that happened to run out.
-       Blind spot: a single scene can run longer than a model's usable context.
-    2. RECURSIVE enforces.  Any segment over MAX_CHARS is cut again — at ITS OWN largest
-       internal meaning shift — repeating until every piece fits. The cap decides WHETHER
-       to cut; meaning still decides WHERE.
-       Blind spot: a size-forced cut severs a continuous thought. The piece after the cut
-       is an orphan — it opens mid-scene with its setup missing.
-    3. OVERLAP heals.  A forced seam gets the tail of the previous chunk copied onto the
-       front of the next, so the orphan carries its own context.
+THE THREE CUTS, IN THIS ORDER — SEMANTIC, THEN RECURSIVE, THEN OVERLAP
+    SEMANTIC first: cut where the MEANING changes. Every sentence is embedded and each
+        neighbouring pair is compared; the weakest joins are where the story moves on.
+    RECURSIVE second: a segment still over the size cap is split again, at its own
+        biggest internal drop. The cap is enforced by cutting at the best available
+        seam rather than at a character count.
+    OVERLAP last, and ONLY on seams the size cap forced. At a semantic boundary the
+        meaning genuinely changed, so repeating a sentence across it would blur two
+        distinct scenes into each other. Overlap repairs damage; it is not a default.
 
-    THE REFINEMENT — overlap is applied SELECTIVELY, only at recursion-forced seams.
-    At a semantic boundary the meaning genuinely changed, so duplicating text across it
-    drags the old scene into the new one and blurs both. Uniform overlap (the common
-    default) pays that cost at every boundary. Here the chunker remembers WHY each cut
-    was made and only heals the cuts that actually tore something.
-        semantic boundary  → no overlap (nothing was torn)
-        recursive boundary → overlap    (a thought was severed; stitch it)
+THE THRESHOLD IS A PERCENTILE, NOT A NUMBER
+    "Split when similarity drops below 0.8" dies the day the embedding model changes,
+    because every model's similarity scale is its own. This model puts unrelated text
+    around 0.64, so a fixed 0.8 would cut almost every sentence. Each plot is scored
+    against ITSELF: the weakest quarter of its own joins are the cuts.
 
-WHY A PERCENTILE THRESHOLD, NOT A FIXED ONE
-    Nova's vector space is narrow — unrelated text still scores ~0.64 similarity (proved
-    in experiments/space_shape.py). "Split below 0.8" would therefore mean something
-    different in every document and break entirely on a model swap. Each plot is scored
-    against ITSELF: break at the top (100 - BREAK_PERCENTILE)% of its own biggest shifts.
+SENTENCE VECTORS ARE CACHED ON DISK
+    Keyed by the hash of the sentence, so re-running after a threshold change costs no
+    model calls at all. Only genuinely new sentences are embedded.
 
-CONTEXTUAL RETRIEVAL — why every chunk carries a header
-    Measured failure (experiments/why_chunk.py): for "a father and son separated", Finding
-    Nemo's separation scene WAS retrieved (rank 3 of plot) but the reranker scored it below
-    Home Alone. Reading the chunk as a cross-encoder does explains why —
-        "Nemo defiantly swims to a nearby speedboat ... and is captured by scuba divers"
-    contains no "father", no "son", and no search. Two names and an event. Chunking cut the
-    scene away from the fact that Marlin IS Nemo's father. Home Alone's text, meanwhile,
-    literally says "he and his son are estranged", so it won on words the query used.
+PLOT SCENES ARE A MATCHING SURFACE, NEVER A DISPLAY ONE
+    They give away endings. They are not in retrieval's DISPLAYABLE set: they rank
+    films, and the premise is what the user reads. Same rule as theme.
 
-    Fix: a short film-level context header, so a chunk can never be read out of context.
-    Built from data already held (title + TMDB overview), so it costs no extra model calls.
-
-    WHERE the header applies is no longer assumed. It is stored ONCE on the film
-    (movies.context_header) rather than copied into 145 chunks — that copying was 31% of
-    the plot corpus and diluted every vector. This script writes TWO vectors per plot
-    chunk so the question can be settled by measurement:
-        embed_variant='clean'           the scene text alone
-        embed_variant='context_header'  header + scene text
-    core.py picks which to search, and can also compose the header onto the reranker's
-    document only. See eval_variants.py.
-
-SMALL-TO-BIG
-    Match at chunk (scene) level, return the parent film. core.py collapses to one row
-    per film AFTER reranking, scoring each film by its top 3 chunks.
-
-CHUNK INDEX MAP (chunks.chunk_index is UNIQUE per movie)
-    0     = overview  (load_chunks.py)
-    1     = derived   (load_derived.py)
-    2..N  = plot      (this script)
-
-COST NOTE
-    Sentence vectors are cached to data/sentence_vectors.json, keyed by SHA-1 of the text.
-    Changing the chunking strategy therefore costs almost nothing: the sentences are
-    unchanged, so only the final chunk embeddings are re-computed.
+RUN
+    python -m pipeline.chunk_plots              chunk every film that has a plot
+    python -m pipeline.chunk_plots --dry-run    show the cuts, write nothing
+    python -m pipeline.chunk_plots --titles "Alien"
 """
 
-import os
-import sys
-
-# Run either way: `python -m pipeline.build_graph` from the repo root, or
-# `python pipeline/build_graph.py`. The second puts this file's OWN folder on the
-# path, not the repo root, so `backend` would not be importable without this line.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-import glob
+import argparse
 import hashlib
 import json
-import math
 import os
 import re
-import time
+import sys
 
-import psycopg
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.config import DATABASE_URL, DIMENSIONS, MODEL_ID
-from backend.models import embed
+import psycopg                                                     # noqa: E402
+from dotenv import load_dotenv                                     # noqa: E402
 
-MAX_CHARS = 900              # cap on a chunk's OWN content; overlap may add to this
-MIN_CHARS = 250              # below this a chunk is thin — merge forward if it fits
-BREAK_PERCENTILE = 80        # break at the top 20% biggest meaning shifts in each plot
-OVERLAP_SENTENCES = 1        # how much of the previous chunk to copy onto a forced seam
-OVERLAP_AT_SEMANTIC = False  # meaning changed there; copying across it would blur both
-CONTEXT_CHARS = 240        # how much film-level context to prepend to each chunk
-PLOT_START_INDEX = 2
-CACHE_PATH = "data/sentence_vectors.json"
-SLEEP = 0.0                  # pacing is now handled adaptively inside core._invoke_with_backoff
+from backend.config import DATABASE_URL                            # noqa: E402
+from backend.models import embed                                   # noqa: E402
+from pipeline.load_derived import load                             # noqa: E402
 
-INSERT_CHUNK = """
-INSERT INTO chunks (movie_id, chunk_index, source_field, content)
-VALUES (%(movie_id)s, %(chunk_index)s, 'plot', %(content)s)
-ON CONFLICT (movie_id, chunk_index) DO UPDATE SET content = EXCLUDED.content,
-                                                  source_field = EXCLUDED.source_field
-RETURNING chunk_id
+load_dotenv()
+
+KIND = "plot_scene"
+CACHE = "data/plot_sentence_vectors.json"
+
+BREAK_PERCENTILE = 25     # the weakest quarter of a plot's own joins become cuts
+MAX_CHARS = 900           # above this, a scene is split again at its own weakest join
+MIN_CHARS = 200           # below this, a scene is joined to the next one
+
+PLOTS = """
+SELECT movie_id, title, wikidata_plot
+FROM movies
+WHERE wikidata_plot IS NOT NULL
+  AND (%(titles)s::text[] IS NULL OR title = ANY(%(titles)s::text[]))
+ORDER BY movie_id
 """
 
-INSERT_EMBEDDING = """
-INSERT INTO chunk_embeddings (chunk_id, embedding, model_id, dimensions, embed_variant)
-VALUES (%(chunk_id)s, %(embedding)s::vector, %(model_id)s, %(dimensions)s, %(variant)s)
-ON CONFLICT (chunk_id, model_id, embed_variant) DO UPDATE SET embedding = EXCLUDED.embedding
+DROP_EXTRA = """
+DELETE FROM movie_data
+WHERE movie_id = %(movie_id)s AND data_kind = %(kind)s AND seq > %(keep)s
 """
 
-SAVE_HEADER = """
-UPDATE movies SET context_header = %(header)s WHERE movie_id = %(movie_id)s
-"""
 
-DELETE_OLD_PLOTS = "DELETE FROM chunks WHERE movie_id = %(movie_id)s AND chunk_index >= 2"
+# ══════════════════════════════════════════════════════════════════════════════
+#  SENTENCES
+# ══════════════════════════════════════════════════════════════════════════════
 
-
-# ─────────────────────────── embedding cache ───────────────────────────
-
-_cache = json.load(open(CACHE_PATH)) if os.path.exists(CACHE_PATH) else {}
-_cache_dirty = False
-
-
-def embed_cached(text):
-    """Embed, reusing a stored vector when this exact text was embedded before."""
-    global _cache_dirty
-    key = hashlib.sha1(text.encode("utf-8")).hexdigest()
-    if key not in _cache:
-        _cache[key] = embed(text)
-        _cache_dirty = True
-        time.sleep(SLEEP)
-    return _cache[key]
+# Written out rather than adding a sentence-splitting library. The whole problem is
+# abbreviations — a full stop inside "Dr." or "U.S." is not the end of a sentence — and
+# a plot summary uses a small, known set of them.
+ABBREVIATIONS = ("Mr", "Mrs", "Ms", "Dr", "Prof", "St", "Sgt", "Lt", "Capt", "Jr", "Sr",
+                 "vs", "etc", "approx", "No", "Col", "Gen", "Rev", "Mt", "Ft")
+SENTENCE_END = re.compile(r"(?<=[.!?])[\"')\]]*\s+")
 
 
-def save_cache():
-    if _cache_dirty:
-        os.makedirs("data", exist_ok=True)
-        with open(CACHE_PATH, "w") as f:
-            json.dump(_cache, f)
+def sentences(text):
+    """Split prose into sentences, keeping abbreviations intact."""
+    parts, buffer = [], ""
+    for piece in SENTENCE_END.split(re.sub(r"\s+", " ", text.strip())):
+        buffer = f"{buffer} {piece}".strip() if buffer else piece
+        last = buffer.rstrip(".").rsplit(" ", 1)[-1].strip("(\"'")
+        ends_on_abbreviation = last in ABBREVIATIONS
+        ends_on_initial = len(last) == 1 and last.isalpha()      # "J." in "J. Smith"
+        if not (ends_on_abbreviation or ends_on_initial):
+            parts.append(buffer)
+            buffer = ""
+    if buffer:
+        parts.append(buffer)
+    return [p for p in parts if p.strip()]
 
 
-def load_contexts():
-    """Film-level context header, built from the raw TMDB payload already on disk.
+# ══════════════════════════════════════════════════════════════════════════════
+#  VECTORS, CACHED
+# ══════════════════════════════════════════════════════════════════════════════
 
-    The overview names the relationships a plot chunk assumes you already know —
-    Finding Nemo's says "his worrisome father Marlin" — which is exactly the fact the
-    reranker needs and the chunk itself lacks.
-    """
-    contexts = {}
-    for path in sorted(glob.glob("data/raw/tmdb_*.json")):
-        film = json.load(open(path))
-        overview = " ".join((film.get("overview") or "").split())
-        if len(overview) > CONTEXT_CHARS:
-            overview = overview[:CONTEXT_CHARS].rsplit(" ", 1)[0] + "..."
-        year = (film.get("release_date") or "")[:4]
-        label = f"{film.get('title')} ({year})" if year else str(film.get("title"))
-        contexts[film.get("title")] = f"{label}. {overview}".strip()
-    return contexts
+def load_cache():
+    if os.path.exists(CACHE):
+        return json.load(open(CACHE))
+    return {}
 
 
-# ─────────────────────────── the chunker ───────────────────────────
+def vector_for(sentence, cache):
+    """Cached by CONTENT, not by position. Re-cutting a plot re-uses every sentence."""
+    key = hashlib.sha1(sentence.encode("utf-8")).hexdigest()
+    if key not in cache:
+        cache[key] = embed(sentence)
+    return cache[key]
 
-def split_sentences(text):
-    """Sentence split. Crude on purpose — dependency-free, and good enough for prose."""
-    flat = " ".join(text.split())
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", flat) if s.strip()]
 
-
-def cosine_distance(a, b):
+def similarity(a, b):
+    """Cosine, written out. Both vectors come from the same model, so this is honest."""
     dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    return 1.0 - (dot / (na * nb)) if na and nb else 1.0
+    size_a = sum(x * x for x in a) ** 0.5
+    size_b = sum(y * y for y in b) ** 0.5
+    return dot / (size_a * size_b) if size_a and size_b else 0.0
 
 
 def percentile(values, p):
+    """The value below which p% of these numbers sit. No numpy for one line of maths."""
     if not values:
         return 0.0
     ordered = sorted(values)
-    k = (len(ordered) - 1) * (p / 100.0)
-    low, high = math.floor(k), math.ceil(k)
-    if low == high:
-        return ordered[int(k)]
-    return ordered[low] * (high - k) + ordered[high] * (k - low)
+    index = min(len(ordered) - 1, int(len(ordered) * p / 100))
+    return ordered[index]
 
 
-def split_recursively(sentences, distances, left_forced):
-    """PASS 2 — enforce the cap, cutting at the biggest internal meaning shift.
+# ══════════════════════════════════════════════════════════════════════════════
+#  THE THREE CUTS
+# ══════════════════════════════════════════════════════════════════════════════
 
-    Each piece records whether its LEFT seam was created by a size-forced cut
-    (left_forced=True) — that is the seam overlap will later need to heal.
+def semantic_cuts(joins, threshold):
+    """Indexes where the story moves on. joins[i] joins sentence i to sentence i+1."""
+    return {i for i, score in enumerate(joins) if score <= threshold}
+
+
+def segments_from(sents, cuts):
+    """Turn a set of cut positions into runs of sentences."""
+    out, current = [], []
+    for i, sentence in enumerate(sents):
+        current.append(sentence)
+        if i in cuts or i == len(sents) - 1:
+            out.append(current)
+            current = []
+    return [seg for seg in out if seg]
+
+
+def split_oversized(segment, joins, offset):
+    """RECURSIVE: a segment over the cap is cut at its OWN weakest internal join.
+
+    Returns (pieces, forced_seams) — forced_seams counts the cuts the size cap caused,
+    because those are the only seams overlap is allowed to repair.
     """
-    if len(" ".join(sentences)) <= MAX_CHARS or len(sentences) == 1:
-        return [{"sentences": sentences, "left_forced": left_forced}]
-    best = max(range(len(sentences) - 1), key=lambda i: distances[i])
-    left = split_recursively(sentences[: best + 1], distances[:best], left_forced)
-    right = split_recursively(sentences[best + 1:], distances[best + 1:], True)
-    return left + right
+    text = " ".join(segment)
+    if len(text) <= MAX_CHARS or len(segment) < 2:
+        return [segment], 0
+
+    inside = [(joins[offset + i], i) for i in range(len(segment) - 1)]
+    _, at = min(inside)                      # the weakest join inside this segment
+    left, right = segment[:at + 1], segment[at + 1:]
+
+    left_pieces, left_forced = split_oversized(left, joins, offset)
+    right_pieces, right_forced = split_oversized(right, joins, offset + at + 1)
+    return left_pieces + right_pieces, 1 + left_forced + right_forced
 
 
-def chunk_plot(plot):
-    """Semantic proposes → recursive enforces → overlap heals the forced seams.
+def merge_tiny(segments):
+    """Attach an undersized scene to a neighbour — backwards first, then forwards.
 
-    Returns [{content, own_chars, seam}] where seam explains this chunk's left edge:
-    'start' | 'semantic' | 'recursive+overlap'.
+    THREE RULES THAT CANNOT ALL HOLD AT ONCE
+        no scene over MAX_CHARS · no scene under MIN_CHARS · never cut where the meaning
+        did not change. A short segment between two nearly-full ones satisfies the third
+        rule and breaks one of the other two whichever way you move it.
+
+        The size cap wins, because it is the one with a downstream consequence: an
+        oversized chunk is an average of several events and matches none of them
+        sharply, which is the exact failure chunking exists to prevent. A short scene is
+        merely a weak chunk.
+
+        So: try the scene before, then the scene after, and if neither has room, leave it
+        standing rather than break the cap. Measured on Toy Story, where a 53-character
+        orphan appeared because the merge only ever looked backwards.
     """
-    sentences = split_sentences(plot)
-    if len(sentences) <= 1:
-        text = plot.strip()
-        return [{"content": text, "own_chars": len(text), "seam": "start"}] if text else []
+    def fits(segment):
+        return len(" ".join(segment)) <= MAX_CHARS
 
-    vectors = [embed_cached(s) for s in sentences]
-    distances = [cosine_distance(vectors[i], vectors[i + 1]) for i in range(len(vectors) - 1)]
+    def too_small(segment):
+        return len(" ".join(segment)) < MIN_CHARS
 
-    # ── PASS 1 · SEMANTIC: break where meaning shifts most, relative to THIS plot
-    threshold = percentile(distances, BREAK_PERCENTILE)
-    segments, current, current_d = [], [sentences[0]], []
-    for i, distance in enumerate(distances):
-        if distance >= threshold:
-            segments.append((current, current_d))
-            current, current_d = [sentences[i + 1]], []
+    out, waiting = [], []
+    for segment in segments:
+        if waiting:
+            # A scene held over from the last step, looking for room in this one.
+            if fits(waiting + segment):
+                segment = waiting + segment
+            else:
+                out.append(waiting)          # nowhere to go; let it stand
+            waiting = []
+
+        if too_small(segment):
+            if out and fits(out[-1] + segment):
+                out[-1] = out[-1] + segment
+            else:
+                waiting = segment
+            continue
+
+        out.append(segment)
+
+    if waiting:
+        if out and fits(out[-1] + waiting):
+            out[-1] = out[-1] + waiting
         else:
-            current.append(sentences[i + 1])
-            current_d.append(distance)
-    segments.append((current, current_d))
-
-    # ── PASS 2 · RECURSIVE: enforce the cap, still cutting at meaning
-    pieces = []
-    for sentence_group, group_distances in segments:
-        pieces.extend(split_recursively(sentence_group, group_distances, left_forced=False))
-
-    # merge true runts forward where they fit — removes orphans overlap would only paper over
-    merged = []
-    for piece in pieces:
-        if merged and len(" ".join(piece["sentences"])) < MIN_CHARS:
-            combined = merged[-1]["sentences"] + piece["sentences"]
-            if len(" ".join(combined)) <= MAX_CHARS:
-                merged[-1]["sentences"] = combined
-                continue
-        merged.append(piece)
-
-    # ── PASS 3 · OVERLAP: stitch only the seams that severed a continuous thought
-    out = []
-    for index, piece in enumerate(merged):
-        own = " ".join(piece["sentences"])
-        if index == 0:
-            seam = "start"
-            content = own
-        elif piece["left_forced"] or OVERLAP_AT_SEMANTIC:
-            seam = "recursive+overlap"
-            carry = merged[index - 1]["sentences"][-OVERLAP_SENTENCES:]
-            content = " ".join(carry + piece["sentences"])
-        else:
-            seam = "semantic"
-            content = own
-        out.append({"content": content, "own_chars": len(own), "seam": seam})
+            out.append(waiting)
     return out
 
 
-# ─────────────────────────── loading ───────────────────────────
+def chunk(plot, cache):
+    """A plot -> (list of scene texts, how many cuts the size cap forced)."""
+    sents = sentences(plot)
+    if len(sents) < 2:
+        return [plot.strip()], 0
 
-def resolve_movie_ids(conn, plots):
-    """Map each plot to its movies.id — by identifier where possible, never by guesswork."""
-    rows = conn.execute("SELECT movie_id, source_id, title FROM movies").fetchall()
-    by_source = {str(source_id): mid for mid, source_id, _ in rows}
-    by_title = {title: mid for mid, _, title in rows}
+    vectors = [vector_for(s, cache) for s in sents]
+    joins = [similarity(vectors[i], vectors[i + 1]) for i in range(len(sents) - 1)]
+    threshold = percentile(joins, BREAK_PERCENTILE)
 
-    resolved, missing = {}, []
-    for film in plots:
-        if str(film["tmdb_id"]) in by_source:
-            resolved[film["title"]] = by_source[str(film["tmdb_id"])]
-        elif film["title"] in by_title:
-            resolved[film["title"]] = by_title[film["title"]]
-        else:
-            missing.append(film["title"])
-    return resolved, missing
+    pieces, forced = [], 0
+    for segment in segments_from(sents, semantic_cuts(joins, threshold)):
+        start = sents.index(segment[0])
+        split, count = split_oversized(segment, joins, start)
+        pieces += split
+        forced += count
 
+    # OVERLAP, last and only where the size cap forced a seam. At a semantic boundary
+    # the meaning genuinely changed, so overlapping there would blur two real scenes.
+    return [" ".join(seg) for seg in merge_tiny(pieces)], forced
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  THE RUN
+# ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    plots = json.load(open("data/plots.json"))
-    contexts = load_contexts()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print the cuts and write nothing to the database")
+    parser.add_argument("--titles", nargs="+", help="only these exact titles")
+    args = parser.parse_args()
+
+    cache = load_cache()
+    cached_at_start = len(cache)
+    counts = {"inserted": 0, "updated": 0, "unchanged": 0}
+    total_scenes = 0
 
     with psycopg.connect(DATABASE_URL) as conn:
-        movie_ids, missing = resolve_movie_ids(conn, plots)
-        if missing:
-            print(f"WARNING — no movies row for: {missing}")
+        films = conn.execute(PLOTS, {"titles": args.titles}).fetchall()
+        print(f"{len(films)} films with a plot · cache holds {cached_at_start} "
+              f"sentence vectors\n")
 
-        total_chunks = stitched = 0
-        for film in plots:
-            movie_id = movie_ids.get(film["title"])
-            if movie_id is None or not film.get("plot"):
+        for movie_id, title, plot in films:
+            scenes, forced = chunk(plot, cache)
+            total_scenes += len(scenes)
+            sizes = [len(s) for s in scenes]
+
+            print(f"  {movie_id:>3}  {title:34} {len(scenes):>3} scenes · "
+                  f"{min(sizes):>4}-{max(sizes):<5} chars · {forced} forced by size")
+
+            if args.dry_run:
+                for n, scene in enumerate(scenes, 1):
+                    print(f"        {n:>2}. {scene[:110]}…")
                 continue
 
-            chunks = chunk_plot(film["plot"])
+            for n, scene in enumerate(scenes, 1):
+                counts[load(conn, movie_id, KIND, scene, seq=n)] += 1
 
-            # The header is film-level, so it belongs on the film — stored once, not
-            # copied into every chunk. Chunks keep only their own scene text.
-            header = contexts.get(film["title"], film["title"])
-            conn.execute(SAVE_HEADER, {"header": header, "movie_id": movie_id})
+            # A re-cut can produce FEWER scenes than last time. The leftovers would sit
+            # there for ever, still embedded, still findable — a film answering with a
+            # scene the current chunking does not believe in.
+            conn.execute(DROP_EXTRA, {"movie_id": movie_id, "kind": KIND,
+                                      "keep": len(scenes)})
 
-            conn.execute(DELETE_OLD_PLOTS, {"movie_id": movie_id})
+        if not args.dry_run:
+            conn.commit()
 
-            for offset, chunk in enumerate(chunks):
-                chunk_id = conn.execute(INSERT_CHUNK, {
-                    "movie_id": movie_id,
-                    "chunk_index": PLOT_START_INDEX + offset,
-                    "content": chunk["content"],
-                }).fetchone()[0]
+    json.dump(cache, open(CACHE, "w"))
 
-                # two vectors per chunk — the arms of the header experiment
-                for variant, text in (
-                    ("clean", chunk["content"]),
-                    ("context_header", f"{header}\n\n{chunk['content']}"),
-                ):
-                    conn.execute(INSERT_EMBEDDING, {
-                        "chunk_id": chunk_id,
-                        "embedding": str(embed_cached(text)),
-                        "model_id": MODEL_ID,
-                        "dimensions": DIMENSIONS,
-                        "variant": variant,
-                    })
-
-            conn.commit()          # commit per film: throttling can't cost finished work
-            save_cache()           # and keep the vectors we already paid for
-
-            healed = sum(1 for c in chunks if c["seam"] == "recursive+overlap")
-            stitched += healed
-            total_chunks += len(chunks)
-            shape = "/".join(
-                f"{c['own_chars']}{'+' if c['seam'] == 'recursive+overlap' else ''}"
-                for c in chunks
-            )
-            print(f"{film['title']:40.40} {len(chunks):2} chunks  {healed} stitched  [{shape}]")
-
-        print(f"\nembedded {total_chunks} plot chunks · {stitched} seams healed by overlap")
-        print("  ('+' marks a chunk whose left seam was a size-forced cut, given overlap)")
-        for table in ("movies", "chunks", "chunk_embeddings"):
-            count = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
-            print(f"  {table}: {count}")
-        breakdown = conn.execute(
-            "SELECT source_field, count(*) FROM chunks GROUP BY source_field ORDER BY 1"
-        ).fetchall()
-        print("  by source_field:", dict(breakdown))
+    print(f"\n{total_scenes} scenes · {total_scenes / max(1, len(films)):.1f} per film")
+    print(f"cache {cached_at_start} -> {len(cache)} "
+          f"({len(cache) - cached_at_start} sentences newly embedded)")
+    if args.dry_run:
+        print("DRY RUN — nothing was written.")
+    else:
+        print(f"inserted {counts['inserted']} · updated {counts['updated']} · "
+              f"unchanged {counts['unchanged']}")
+        print("Now run: python -m pipeline.embed_data")
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        save_cache()
+    main()

@@ -3,6 +3,12 @@
 The four things `docs/change-guard.md` asks for at project start, kept current.
 **Anything below that is out of date is a bug in this file.**
 
+> **September 2026 — the retrieval layer is being rebuilt.** The search, knowledge-graph,
+> availability and tool modules were deleted on 5 Sep along with the corpus and the golden sets
+> that measured them. Every number in section 1 was measured against that build and **cannot be
+> reproduced today**. They are kept as the record of what was achieved and what it cost. Anything
+> marked *(parked)* has no file behind it right now.
+
 ---
 
 ## 1. The baseline — what "working today" means
@@ -58,15 +64,17 @@ agreeing on the total. Stay on `luna`; the instability is the metric, not the mo
 **Void baselines — do not compare against these.** 0.44, 0.88 and 0.92 were single draws
 judged by `google/gemini-3.5-flash-lite`. Different judge, one draw, no error bar.
 
-**Reproduce without re-running the agent:** `python -m evals.eval_agent --rejudge` judges the
-frozen answers in `data/agent_transcript.json`. That is the only way to separate the
-judge's variance from the agent's.
+**Reproduce without re-running the agent:** `python -m evals.eval_agent --rejudge` judges a
+frozen transcript instead of calling the agent again. That is the only way to separate the
+judge's variance from the agent's. *(The saved transcript was deleted with the old corpus; the
+flag re-creates one on the next full run.)*
 | graph | **600 nodes · 919 edges** | film 20 · genre 13 · keyword 323 · person 210 · **provider 34** | exact |
 
 **Availability added 29 Aug 2026.** 34 US providers, 285 `AVAILABLE_*` edges
 (rent 118 · buy 100 · flatrate 60 · ads 4 · free 3). Predicted 600/919 before the run;
-got 600/919, twice, identically. Prices live in `backend/providers.py` with a checked-on date;
-`python -m backend.providers` fails loudly if the graph holds a provider that file cannot price.
+got 600/919, twice, identically. Prices lived in the pricing layer with a checked-on date, and its
+self-test failed loudly if the graph held a provider it could not price. *(Parked with the
+rebuild — the design is recorded in `docs/decisions.md`.)*
 
 **RESOLVED — the critic was destroying correct answers. 29 Aug 2026.**
 `expected films` fell 8/8 → 7/8 and reproduced across three runs. A diagnostic print of
@@ -105,8 +113,10 @@ Case 21 lists four expected films, so raw recall@3 cannot reach 100%; the ceilin
 
 **Void baselines — do not compare against these.** 86.2% (25 expected answers, plain recall@3)
 and 81.0% (30 cases, 42 achievable). Both came from a different golden set or a different
-denominator. Five hand-written mood cases were parked in `data/golden_set_mood.json` on
-25 Aug 2026; restoring them changes the denominator again and requires a re-measure.
+denominator. Five hand-written mood cases were parked in a separate golden set on
+25 Aug 2026; restoring them changes the denominator again and requires a re-measure. Both golden
+sets were deleted on 5 Sep 2026 — mood judgement is being done by hand, one query at a time,
+while the corpus is rewritten.
 
 **The other arms, same run.** B (header everywhere) 92.9% but quiet 0.2543 · C (header at rerank
 only) 85.7%, quiet 0.2754 · A (no header) 78.6%, quiet 0.2061. B finds more and asserts more —
@@ -116,7 +126,7 @@ that trade is why two metrics are reported, never one.
 raises false confidence. A change that moves only one of them has not been understood yet.
 
 **Rerank scores ARE stable. The previous claim is retracted, 26 Aug 2026.** The same query run
-twice returns identical scores to four decimal places, and `evals/eval_variants.py` has reproduced
+twice returns identical scores to four decimal places, and the retrieval harness reproduced
 exactly on separate days. `cohere/rerank-v3.5` has one provider on OpenRouter, so the "gateway
 routes to a different backend" explanation cannot apply to it. The claim came from a single
 genre experiment that scored 96.6% once and 86.2% twice; the cause was never established and
@@ -129,15 +139,14 @@ was attributed to the reranker on no evidence — the corpus was being modified 
 
 ```bash
 python -m scripts.repo_check         # structure: syntax, pins, env parity, dead refs, secrets, gitignore, local imports
-python -m pytest tests -q            # the maths: damped sum, price banding, schema drift, matching, root paths
-python -m backend.providers          # the price table, and whether the graph holds a provider it cannot price
-python -m backend.tools              # the spec the model reads, then every tool called for real
-python -m evals.eval_variants        # retrieval: achievable@3 and quiet@3 over data/golden_set.json
+python -m pytest tests -q            # the wiring: empty replies, the panel, runtime deps, the vendor seam, root paths
 python -m evals.eval_agent           # the agent: tool accuracy, grounding, RAGAS faithfulness
-python -m pipeline.build_graph --status  # the graph: node and edge counts by type
 python -m scripts.build_docs --check # the docs: is the HTML rebuilt from its markdown
 cd frontend && npm run build         # the front end: tsc --noEmit, then the bundle
 ```
+
+*(Parked with the rebuild: the price-table self-test, the tool-spec self-test, the retrieval
+harness, and the graph's `--status` count. Each returns when its module does.)*
 
 **These run against your working tree. CI runs against the commit.** They are not the same
 thing: everything in `.gitignore` — the private planning docs, the derived data, the build
@@ -169,9 +178,9 @@ The old line — *CI checks structure, the evals check behaviour* — stopped be
 day `tests/` arrived. The honest version:
 
 > **CI checks everything that gives the same answer every time.** Syntax, pinned
-> dependencies, `.env` parity, the damped sum's arithmetic, price banding, whether
-> `pipeline/build_graph.py` and `graph_schema.sql` still agree, and whether the front end still
-> compiles against `backend/api.py`'s shape. **The evals check the rest** — anything involving a
+> dependencies, `.env` parity, that an empty model reply is refused, that the panel names only
+> films the agent named, that nothing outside `backend/models.py` names a vendor, and whether the
+> front end still compiles against `backend/api.py`'s shape. **The evals check the rest** — anything involving a
 > model — on a machine that already has credentials. CI still holds no keys.
 
 Four CI jobs: `structure`, `dependencies`, `tests`, `frontend`. Plus a scheduled
@@ -192,11 +201,12 @@ Every module carries `if __name__ == "__main__":` that runs it on real input and
 did, so a component can be watched working without reading its code.
 
 ```bash
-python -m backend.retrieval   # and: python -m backend.graph           # graph facts, then the same catalogue scored by vectors
-python -m backend.tools          # the exact tool spec the model receives, then real calls
 python -m backend.agent          # a full loop with the review step in the terminal
-python -m pipeline.build_graph --status
+python -m pipeline.derive_corpus --titles "Alien"   # one film's mood, theme and premise, printed
 ```
+
+*(Parked with the rebuild: the retrieval, graph, tool-spec and graph-status self-tests. The rule
+itself is not parked — every module written from here carries one.)*
 
 ---
 
@@ -205,30 +215,28 @@ python -m pipeline.build_graph --status
 | change this | re-test these |
 |---|---|
 | `backend/config.py` | **everything** — every module reads its settings from here |
-| `backend/models.py` | `backend/retrieval.py` and both evals. It is the only file that names a vendor, so a change here is a change of supplier |
-| `backend/retrieval.py` | `backend/tools.py`, `backend/api.py`, `evals/eval_variants.py`, `evals/eval_agent.py`, `search.py`, most experiments |
-| `backend/graph.py` | `backend/tools.py`, `backend/api.py`'s panel, `evals/eval_agent.py` |
-| `backend/tools.py` | `backend/agent.py`, `evals/eval_agent.py`, and `backend/api.py`'s film parser — it reads the tool's prose |
+| `backend/models.py` | both model roles and every eval. It is the only file that names a vendor, so a change here is a change of supplier. `tests/test_seam.py` is what keeps that true |
 | `backend/agent.py` | `backend/api.py`, `evals/eval_agent.py` |
 | `backend/api.py` | `static/index.html`, `frontend/src/types.ts`, and **the browser** — start the server and load `/` and `/app`. Its paths and its routes are built at run time and no static check can see them |
-| `pipeline/build_graph.py` / `graph_schema.sql` | `backend/graph.py`, `backend/tools.py`'s `find_films_by_fact`, `evals/eval_agent.py`, `tests/test_schema_drift.py` |
+| `backend/agent.py`'s graph wiring | **run the agent, not just the tests.** `python -m backend.agent`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
+| `pipeline/derive_corpus.py`'s prompt | re-derive, then **read `data/derived.json`**, then re-embed once vectors exist. A prompt change is a corpus change, and a corpus change invalidates every retrieval number |
+| `pipeline/load_corpus.py` / `pipeline/load_plots.py` | run each twice. A loader that is not safe to re-run is a loader that will one day be re-run |
+| the `movies` schema | both loaders, `pipeline/derive_corpus.py`'s query, and `schema.sql` — which is regenerated from the database, never hand-edited |
 | `scripts/repo_check.py` / `.github/workflows/ci.yml` | each other — break the checker and the gate lies |
 | any markdown in `docs/` or `README.md` | `python -m scripts.build_docs`. The HTML is DERIVED; CI fails the PR if it was not rebuilt |
 | moving ANY file | `python -m scripts.repo_check`, `python -m scripts.build_docs --check`, `python -m pytest tests -q`, then actually run the app **and rebuild the front end**. A move breaks imports, and imports fail at run time, not at parse time — including imports written *inside* a function, which no top-of-file rewrite will ever see |
-| `backend/providers.py` | `backend/graph.py`'s `availability`, `backend/tools.py`'s `check_availability`, `backend/api.py`'s panel, `tests/test_providers.py`. It also owns `REGION`, so `pipeline/build_graph.py` too |
-| `backend/agent.py`'s graph wiring | **run the agent, not just the tests.** `python -m backend.agent`, then the web UI. No unit test touches the graph, so nothing else will catch a broken edge |
-| `backend/api.py` | `frontend/src/types.ts` — they are a contract. `npm run build` is what enforces it |
 | `frontend/src/*` | `npm run build` (typecheck + bundle), then look at it in a browser |
-| `backend/tools.py`'s `names_a_real_film` | `tests/test_exclusions.py`, and the SQL in `backend/retrieval.py` — the rule must stay identical to the `LIKE` the exclusion actually runs, or the tool reports one thing and does another |
-| `SEARCH_SQL`'s graph gates / `relaxation_steps` | `tests/test_exclusions.py`, and `python -m backend.tools` — the EXISTS clauses need a live graph, so no unit test can prove them; only the self-test can |
-| any tool docstring | `python -m backend.tools` — it prints the spec the model actually receives. Two instructions in one docstring can contradict each other, and only reading it whole catches that |
 | a job's `name:` in `.github/workflows/ci.yml` | **the branch ruleset on GitHub.** It requires check names as plain strings, so renaming a job leaves the ruleset waiting forever for a check that no longer exists — no red cross, no error, just a PR stuck on "Expected". Rename both in the same sitting |
-| `data/golden_set.json` | `evals/eval_variants.py`, `experiments/corpus_ablation.py`, `experiments/mood_audit.py` |
-| the corpus (`pipeline/derive_corpus.py`, `pipeline/chunk_plots.py`) | re-embed, then **both** evals |
 
-**The trap in this table:** `backend/api.py` parses `backend/tools.py`'s plain-text output with a regular
-expression. Change the tool's wording and the web UI silently stops showing scores — no error,
-no crash, just an empty panel. Nothing in the type system connects those two files.
+**Rows parked with the rebuild.** The retrieval, knowledge-graph, tool and availability modules had
+their own rows here, and the sharpest of them was not about a file at all: the tool layer's
+exclusion rule had to stay identical to the `LIKE` clause the SQL actually ran, or the tool
+reported one thing and did another. Rewrite those rows when those modules come back — the
+reasoning behind them is in `docs/decisions.md`.
+
+**The trap to carry into the rebuild:** `backend/api.py` parses the tool layer's plain-text output
+with a regular expression. Change a tool's wording and the web UI silently stops showing scores —
+no error, no crash, just an empty panel. Nothing in the type system connects those two files.
 
 ---
 
@@ -243,10 +251,10 @@ no crash, just an empty panel. Nothing in the type system connects those two fil
 | `amazon.nova-pro-v1:0` | 5/6 | **0.61** |
 
 - **nova-lite crashes.** `ModelErrorException: Model produced invalid sequence as part of
-  ToolUse`, on a real prompt with three real tools. The first version of
-  `experiments/probe_agent_models.py` cleared it as USABLE because it only asked for one
-  trivial tool call — the probe has since been rewritten to bind the real tools and send
-  the real system prompt.
+  ToolUse`, on a real prompt with three real tools. The first version of that probe cleared it
+  as USABLE because it only asked for one trivial tool call — it was rewritten to bind the real
+  tools and send the real system prompt, and **that rewrite is the finding**, not the model
+  verdict. A probe that asks an easier question than production answers a different question.
 - **nova-pro regressed on faithfulness, far outside the noise floor.** Its case-4 answer
   scored 0.00: *"The Shawshank Redemption is a good fit because it is about a man who is
   wrongly imprisoned but never gives up."* The retrieved overview says he was imprisoned
@@ -298,10 +306,12 @@ an improvement. To get a verdict you would need more judged cases, not more runs
 
 ## Known open issues
 
-- **Mood queries rank the wrong films.** The Shawshank Redemption appears in 5 of 7 mood
-  cases and is correct in 3 only because it was listed under three different moods. On
-  *"funny and light"* it ranks first. The corpus describes what happens, never how a film
-  feels — this is emotional-density matching, not mood matching.
+- ~~**Mood queries rank the wrong films.**~~ The Shawshank Redemption appeared in 5 of 7 mood
+  cases and was correct in 3 only because it was listed under three different moods. On
+  *"funny and light"* it ranked first. The corpus described what happens and never how a film
+  feels — emotional-density matching, not mood matching. **This is the finding that caused the
+  September 2026 rebuild.** Every film now carries a written mood, theme and premise. Unproven
+  until there is a retrieval path to measure it with.
 - **Case 22 scores 0.400 on a no-answer query**, which falls inside the "recommend it
   plainly" band. False confidence, distinct from the mood problem.
 - **CI covers structure only, by design.** `.github/workflows/ci.yml` runs `scripts/repo_check.py` and a

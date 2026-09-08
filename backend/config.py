@@ -22,28 +22,45 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 REGION = os.environ["AWS_REGION"]
 
-# ─── The agent's model ────────────────────────────────────────────────────────
-# Which VENDOR answers, and which MODEL of theirs. Two settings, not one, because
-# the model id means nothing without knowing whose catalogue it comes from.
+# ─── Two model roles, two switches ────────────────────────────────────────────
+# There are TWO generation jobs in this application and they want different models.
+# One switch cannot serve both: flipping it to reach a better writer would also move
+# the agent, which was measured on 2 Sep at 57s and 48K tokens against Nova's 2s and
+# 10K for the same question. Two roles, two settings, and neither can silently become
+# the other.
 #
-# bedrock is the default and the only provider proven in production. vertex is
-# switchable so the two can be compared on the same eval — never so that a live
-# deployment quietly changes model.
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "bedrock")
+#   AGENT    live. A person is waiting. Chooses tools, writes the answer.
+#            Speed matters. The system prompt is tuned for this model specifically.
+#
+#   DERIVE   build time. Nobody is waiting. Writes each film's mood, theme and
+#            premise, once, into the database. Only quality matters here.
+#
+# Each role picks a PROVIDER, and the provider decides which model id is read. The id
+# alone means nothing — "gemini-2.5-pro" is not a thing Bedrock can be asked for.
 
-# Per provider, because "the agent's model" is a different string on each. The
-# Bedrock one falls back to BEDROCK_MODEL_TEXT: the agent and the build-time
-# enrichment share a model until someone deliberately splits them.
+AGENT_PROVIDER = os.environ.get("AGENT_PROVIDER", "bedrock")
+DERIVE_PROVIDER = os.environ.get("DERIVE_PROVIDER", "vertex")
+
+# The agent, per provider. The Bedrock one falls back to BEDROCK_MODEL_TEXT so a
+# machine with only that variable still starts.
 AGENT_MODEL_BEDROCK = os.environ.get("BEDROCK_MODEL_AGENT",
                                      os.environ["BEDROCK_MODEL_TEXT"])
 AGENT_MODEL_VERTEX = os.environ.get("VERTEX_MODEL_AGENT", "gemini-3.8-flash")
 
-# What is ACTUALLY running. The UI header and every trace report this one, so a
-# glance at the page answers "which model wrote this?" without reading config.
-AGENT_MODEL = AGENT_MODEL_VERTEX if LLM_PROVIDER == "vertex" else AGENT_MODEL_BEDROCK
+# The deriver, per provider. Vertex defaults to the quality tier rather than a Flash
+# model: this job runs offline over the whole corpus, so a slow answer costs nothing
+# and a badly written one is stored forever.
+DERIVE_MODEL_BEDROCK = os.environ.get("BEDROCK_MODEL_DERIVE",
+                                      os.environ["BEDROCK_MODEL_TEXT"])
+DERIVE_MODEL_VERTEX = os.environ.get("VERTEX_MODEL_DERIVE", "gemini-2.5-pro")
 
-# Vertex only. No key: credentials come from Application Default Credentials,
-# written outside this project by `gcloud auth application-default login`.
+# What is ACTUALLY running for each role. The UI header and every trace report
+# AGENT_MODEL, so a glance at the page answers "which model wrote this?".
+AGENT_MODEL = AGENT_MODEL_VERTEX if AGENT_PROVIDER == "vertex" else AGENT_MODEL_BEDROCK
+DERIVE_MODEL = DERIVE_MODEL_VERTEX if DERIVE_PROVIDER == "vertex" else DERIVE_MODEL_BEDROCK
+
+# Vertex only. No key: credentials come from Application Default Credentials, written
+# outside this project by `gcloud auth application-default login`.
 # `global`, not a region — current Gemini models 404 on us-central1.
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "")
 GCP_LOCATION = os.environ.get("GCP_LOCATION", "global")

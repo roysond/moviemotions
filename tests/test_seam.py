@@ -81,4 +81,8 @@ def test_chat_model_covers_every_declared_provider():
     """
     source = (ROOT / "backend" / "models.py").read_text(encoding="utf-8")
     for provider in ("bedrock", "vertex"):
-        assert f'LLM_PROVIDER == "{provider}"' in source, provider
+        # `provider ==`, not `LLM_PROVIDER ==`. The single switch became two on 5 Sep
+        # — AGENT_PROVIDER and DERIVE_PROVIDER — and _chat() now takes whichever one
+        # applies as an argument. The rule is the same; the name it is spelled with
+        # moved.
+        assert f'provider == "{provider}"' in source, provider

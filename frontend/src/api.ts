@@ -56,14 +56,10 @@ export function excludedTitles(trace: AdvanceResponse['trace']): string[] {
 // it reaches, which tables it reads, and whether a model is involved at all.
 const TOUCHES: Record<string, string> = {
   search_films:
-    'Bedrock (embed) → pgvector cosine over chunks + chunk_embeddings ' +
-    '→ Cohere rerank → damped sum collapses chunks to films',
+    'Bedrock (embed) → pgvector cosine over movie_data + movie_vectors ' +
+    '→ ranked within each kind of text → best row per film',
   lookup_film:
-    'exact SQL on movies — no model, no vectors, no scores',
-  find_films_by_fact:
-    'exact SQL on graph_nodes + graph_edges — no model, no scores',
-  check_availability:
-    'graph_nodes + graph_edges (AVAILABLE_*) → priced and banded by providers.py',
+    'exact SQL on movies + movie_data — no model, no vectors, no scores',
 }
 
 // What the agent asked for, ARGUMENTS INCLUDED.

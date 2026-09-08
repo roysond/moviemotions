@@ -1,0 +1,142 @@
+[
+  {
+    "movie_id": 1,
+    "title": "Jurassic Park",
+    "mood_feel": "The experience begins with a profound sense of awe at seeing the impossible made real, which then gives way to a relentless, heart-pounding dread as that creation turns violently against its creators.",
+    "theme": "The belief that humanity can resurrect and contain the powerful, chaotic forces of nature is a dangerous illusion.",
+    "premise": "An eccentric industrialist invites a team of scientific experts to a remote island to endorse his revolutionary theme park of cloned dinosaurs. During a preview tour, a critical power failure amid a tropical storm allows the park's most dangerous attractions to escape their enclosures."
+  },
+  {
+    "movie_id": 2,
+    "title": "Predator",
+    "mood_feel": "The film instills a growing sense of dread as the viewer watches a team of supremely confident, elite soldiers become unnerved and then terrified prey. The initial feeling of watching an unstoppable force gives way to the primal fear of being systematically hunted by something far superior.",
+    "theme": "The film explores the brutal hierarchy of predation, questioning what happens when the ultimate human hunter becomes the quarry for a more advanced and ruthless predator.",
+    "premise": "An elite paramilitary team is deployed to a Central American jungle on a dubious rescue mission. After discovering evidence of a previous team's gruesome demise, they realize they are being stalked and systematically eliminated by an unseen, technologically superior hunter."
+  },
+  {
+    "movie_id": 3,
+    "title": "Harry Potter and the Philosopher's Stone",
+    "mood_feel": "The film creates a feeling of pure wonder as a hidden world of magic is revealed, balanced by the warmth of newfound friendship and the thrill of a dangerous schoolyard mystery.",
+    "theme": "The film explores how the bonds of friendship and the legacy of a mother's love provide the truest forms of protection against evil.",
+    "premise": "An orphaned boy living a miserable life with his cruel relatives discovers on his eleventh birthday that he is a wizard. Whisked away to a magical boarding school, he learns of his famous past and begins to investigate a mysterious object hidden within the castle walls."
+  },
+  {
+    "movie_id": 4,
+    "title": "Spider-Man",
+    "mood_feel": "The experience is a blend of wide-eyed wonder at discovering impossible new abilities and the somber, isolating weight of the personal sacrifices required to use them for good.",
+    "theme": "True strength is defined not by the powers one possesses, but by the willingness to sacrifice personal happiness for the well-being of others.",
+    "premise": "After a genetically altered spider gives him incredible powers, outcast high school student Peter Parker must learn to use them for good following a personal tragedy. At the same time, a wealthy industrialist's own experiment goes wrong, creating a powerful and unhinged new threat to the city."
+  },
+  {
+    "movie_id": 5,
+    "title": "Terminator 2: Judgment Day",
+    "mood_feel": "The experience is a breathless, high-stakes chase against a seemingly invincible foe, punctuated by moments of unexpected tenderness as an artificial guardian learns to care for its human charge.",
+    "theme": "The film questions the nature of humanity by exploring whether a machine can learn the value of life while mankind rushes toward self-annihilation.",
+    "premise": "In 1995 Los Angeles, a troubled boy who is the key to humanity's future is targeted for assassination by a technologically superior, liquid-metal Terminator from the future. His only hope is another, less-advanced cyborg sent back to protect him, and his estranged mother, who has been institutionalized for her warnings of an impending apocalypse."
+  },
+  {
+    "movie_id": 6,
+    "title": "Crazy, Stupid, Love.",
+    "mood_feel": "The experience is one of cringing through hilariously awkward romantic missteps, only to be surprised by moments of genuine connection that emerge from the chaos.",
+    "theme": "Finding a soulmate is not the end of the story, but the beginning of the messy, ongoing, and necessary work of fighting for love.",
+    "premise": "A middle-aged man's life implodes when his wife asks for a divorce after admitting to an affair. Utterly lost in the new world of being single, he is taken under the wing of a charismatic young womanizer who promises to teach him how to regain his confidence and succeed with women."
+  },
+  {
+    "movie_id": 7,
+    "title": "Mortal Kombat",
+    "mood_feel": "Watching this feels like being ringside for a brutal, supernatural fight club, where the visceral shock of gory combat is matched only by the spectacle of newly-unleashed, world-altering powers.",
+    "theme": "True strength is not earned but discovered, a violent birthright unlocked by embracing one's pre-ordained destiny and lineage.",
+    "premise": "A washed-up MMA fighter discovers he is one of several prophesied champions destined to defend Earth in a final, decisive tournament against the realm of Outworld. Before the tournament can even begin, he and the other unprepared fighters are hunted by supernatural assassins sent to eliminate them."
+  },
+  {
+    "movie_id": 8,
+    "title": "The Karate Kid",
+    "mood_feel": "Watching this feels like being an outsider in a vast, unfamiliar world, finding solace and strength not through aggression, but through the patient, sometimes sorrowful, guidance of an unlikely mentor.",
+    "theme": "True mastery comes not from learning how to fight, but from finding the inner balance and discipline to overcome fear and adversity.",
+    "premise": "After moving from Detroit to Beijing, 12-year-old Dre Parker is relentlessly bullied by a gang of kung fu prodigies. Following a particularly brutal attack, the building's unassuming maintenance man, Mr. Han, steps in and makes a deal: he will train Dre to face his tormentors in an upcoming tournament if the bullies leave him alone until then."
+  },
+  {
+    "movie_id": 9,
+    "title": "Logan",
+    "mood_feel": "The experience is one of raw, weary intimacy, watching a once-unbeatable hero's body and spirit break down under the weight of a long, violent life. It is a painful, desperate final chapter, witnessing the slow, agonizing decay of a legend forced into one last, brutal fight.",
+    "theme": "A person defined by violence must confront whether they can escape their nature to find a new purpose in family and protect the next generation from repeating a brutal legacy.",
+    "premise": "In a near-future where mutants are nearly extinct, an aging Logan with failing powers cares for a senile Charles Xavier on the Mexican border. His attempt at isolation is shattered when he reluctantly agrees to transport a mysterious young girl with powers like his own, forcing them on the run from the sinister corporation that created her."
+  },
+  {
+    "movie_id": 10,
+    "title": "Alien",
+    "mood_feel": "Watching this feels like being trapped in a cold, mechanical labyrinth, stalked by an unseen and unknowable horror. The mounting dread is punctuated by moments of shocking, visceral violence, creating a constant state of anxiety and helplessness.",
+    "theme": "Human life is terrifyingly fragile and ultimately expendable, both to the indifferent forces of nature and the calculated greed of corporate power.",
+    "premise": "The seven-person crew of a commercial towing vessel, on its long journey home, is awakened from stasis to investigate a mysterious transmission from a nearby moon. During the investigation, one crew member is attacked by a parasitic creature that latches onto his face, forcing them to bring the unknown organism back aboard their ship."
+  },
+  {
+    "movie_id": 11,
+    "title": "The Shawshank Redemption",
+    "mood_feel": "Watching the film feels like bearing witness to decades of quiet suffering and institutional cruelty, punctuated by small, defiant acts of grace. It creates a patient, somber atmosphere that slowly builds toward a powerful feeling of earned liberation.",
+    "theme": "The endurance of the human spirit and the power of hope can sustain a person's inner freedom, even when their body is captive.",
+    "premise": "In 1947, a quiet and successful banker is wrongly convicted for a double murder and sentenced to life at the brutal Shawshank State Prison. Facing constant threats from other inmates, he must learn to survive by forming an unlikely friendship with a fellow lifer who can procure goods from the outside."
+  },
+  {
+    "movie_id": 12,
+    "title": "Finding Nemo",
+    "mood_feel": "The viewer is pulled between a father's desperate, heart-pounding panic and the awe of a vast, vibrant, and perilous underwater world. It feels like being lost in an immense, beautiful, and dangerous place, driven forward by a singular, frantic hope.",
+    "theme": "True parental love requires learning to trust your children to face the world's dangers on their own.",
+    "premise": "After a past tragedy, an overprotective clownfish father lives in fear of the ocean's dangers. When his only son defiantly swims into the open sea to prove his independence, he is captured by a diver, forcing the timid father to brave the vast, unknown ocean to get him back."
+  },
+  {
+    "movie_id": 13,
+    "title": "The Dark Knight",
+    "mood_feel": "The experience is one of escalating dread, as a city's hope is systematically dismantled by a force of pure, philosophical anarchy. You feel the foundations of order cracking under the weight of one man's nihilistic game.",
+    "theme": "The film explores whether established systems of order and morality can survive a confrontation with pure, motiveless chaos.",
+    "premise": "In Gotham City, the vigilante Batman allies with District Attorney Harvey Dent and Lieutenant Jim Gordon to dismantle the city's organized crime syndicates. Their success is immediately challenged by the emergence of the Joker, a chaotic mastermind who offers the desperate mob a simple solution: he will kill the Batman."
+  },
+  {
+    "movie_id": 14,
+    "title": "Rocky",
+    "mood_feel": "The experience is one of gritty tenderness, watching a lonely man's quiet desperation slowly transform into raw, unyielding determination. It inspires a profound, personal investment in his struggle, making his every small step forward feel like a monumental victory.",
+    "theme": "A person's dignity and self-respect are earned not by defeating others, but by enduring against impossible odds to prove one's own worth.",
+    "premise": "A small-time Philadelphia club fighter who moonlights as a loan shark's collector is given a one-in-a-million shot at glory. When the world heavyweight champion's opponent is injured, the champion plucks the unknown boxer from obscurity for a title match, seeing it as a perfect Bicentennial publicity stunt."
+  },
+  {
+    "movie_id": 15,
+    "title": "Inception",
+    "mood_feel": "Watching feels like trying to solve an intricate puzzle while falling, as the rules of logic and physics constantly shift beneath you. A sense of profound loss and unresolved guilt haunts the slick, cerebral action, leaving a lingering question about the very nature of reality.",
+    "theme": "A single, powerful idea can irrevocably alter a person's perception of reality, making the worlds we build in our minds just as potent and dangerous as the one we live in.",
+    "premise": "A fugitive thief who specializes in stealing secrets from people's dreams is offered a chance to return home to his children. To earn his freedom, he must assemble a team to perform the impossible—planting an idea in a target's mind—a task made perilous by the projections of his own guilty subconscious."
+  },
+  {
+    "movie_id": 16,
+    "title": "Titanic",
+    "mood_feel": "You are swept up in the grandeur of a passionate, forbidden romance, only to be plunged into the overwhelming and terrifying chaos of a historic disaster.",
+    "theme": "True love can be a catalyst for liberation from the gilded cage of societal expectations and class.",
+    "premise": "In 1912, a wealthy young woman trapped in a stifling engagement boards the RMS Titanic with her fiancé and family. Despairing of her future, she is saved from a desperate act by a charismatic, third-class artist, igniting a forbidden romance that defies the ship's rigid social hierarchy."
+  },
+  {
+    "movie_id": 17,
+    "title": "The Hangover",
+    "mood_feel": "Watching this feels like being dragged along on a frantic, detective-like scavenger hunt where each new clue only deepens the absurdity of the central mystery. The experience is one of continuous, escalating bewilderment as the puzzle of a forgotten night is pieced together from the most bizarre evidence imaginable.",
+    "theme": "The film is about the hilarious, catastrophic consequences that unfold when civilized men completely surrender to their most primal, irresponsible impulses for a single night.",
+    "premise": "Two days before his wedding, a groom and his three friends head to Las Vegas for a bachelor party. The next morning, the three groomsmen wake up in their destroyed hotel suite with extreme memory loss, a tiger in the bathroom, a baby in the closet, and no sign of the groom."
+  },
+  {
+    "movie_id": 18,
+    "title": "Home Alone",
+    "mood_feel": "The experience is one of gleeful, childlike anarchy, where the fantasy of being left to your own devices is paired with the cathartic, slapstick spectacle of outsmarting foolish adults. A gentle undercurrent of holiday loneliness and the longing for family provides a soft landing for all the mayhem.",
+    "theme": "True independence is not the absence of family, but the discovery of one's own courage and the realization that even the most annoying loved ones are essential.",
+    "premise": "After being punished for a fight with his brother, an eight-year-old boy wishes his large, chaotic family would disappear. The next morning, a power outage and a frantic rush to the airport for a Christmas trip to Paris cause his family to accidentally leave him behind in their suburban Chicago home."
+  },
+  {
+    "movie_id": 19,
+    "title": "Toy Story",
+    "mood_feel": "Watching this feels like being let in on the secret, vibrant world of childhood play, only to be plunged into a frantic adventure where jealousy and peril turn familiar places into dangerous obstacle courses.",
+    "theme": "The film is about how envy and a crisis of identity can be overcome by finding purpose in making others happy.",
+    "premise": "In a world where toys secretly come to life, a vintage cowboy doll's status as his owner's favorite is threatened by a popular new space-ranger action figure. The cowboy's jealous attempt to hide his rival goes wrong, accidentally stranding them both in the outside world just as their owner's family is preparing to move."
+  },
+  {
+    "movie_id": 20,
+    "title": "Get Out",
+    "mood_feel": "The experience is one of mounting dread, where the subtle discomfort of navigating racial microaggressions slowly gives way to a suffocating paranoia. You feel a growing sense of being trapped and scrutinized, as if your own body is no longer your own.",
+    "theme": "The film is about the insidious nature of liberal racism, which fetishizes and consumes black bodies under the guise of admiration while silencing the person within.",
+    "premise": "A young Black photographer travels to his white girlfriend's secluded family estate to meet her parents for the first time. His initial anxieties are quickly overshadowed by the family's unnervingly effusive behavior and the bizarre, vacant conduct of their Black servants, culminating in a disturbing hypnotherapy session with his girlfriend's mother."
+  }
+]

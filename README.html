@@ -59,7 +59,7 @@
            ▲                                                         THEN pgvector + rerank
            │                                   lookup_film         ──▶ exact title
            │                                   find_films_by_fact  ──▶ knowledge graph
-           │                                   check_availability  ──▶ graph + backend/providers.py
+           │                                   check_availability  ──▶ knowledge graph + the pricing layer
            └────── reads the results, decides again ◀────────────────────┘
                                │
                         human review  ⏸  approve / edit / send back
@@ -68,6 +68,11 @@
                   answer  +  a panel of posters, reasons and prices</code></pre>
 <p>Three of those four tools never touch a model.</p>
 <p><code>search_films</code> filters <strong>before</strong> it ranks. Runtime and year are columns on <code>movies</code>; genre, actor and director are edges in the knowledge graph, checked with an <code>EXISTS</code> in the same query. Whatever survives is what the vector search sees. When nothing survives, the tool works out which constraint is to blame — length is a convenience and may be given up, a genre is the request and never is — and offers the trade instead of returning nothing.</p>
+<hr>
+<h2 id="status-september-2026">Status — September 2026</h2>
+<p><strong>The retrieval layer is being rebuilt and is not in the repository right now.</strong> On 5 September the search, knowledge-graph, availability and tool modules were deleted along with the corpus they read, because the corpus itself was being redesigned and there was no point maintaining code against a schema that was about to change.</p>
+<p>What exists today: the <code>movies</code> table, the fetch and load pipeline, and <code>pipeline/derive_corpus.py</code>, which writes each film's mood, theme and premise. The build order from here is <strong>related tables → vectors → knowledge graph → retrieval → tools</strong>.</p>
+<p>Everything below that describes searching, ranking, the graph, availability or the agent's tools describes the <strong>previous</strong> build. It is kept because the reasoning still governs the rebuild, not because the code is there. Anything marked <em>(being rebuilt)</em> has no file behind it today.</p>
 <hr>
 <h2 id="what-it-does-that-a-plain-rag-pipeline-doesn-t">What it does that a plain RAG pipeline doesn't</h2>
 <table><thead><tr><th></th><th></th></tr></thead><tbody>
@@ -93,40 +98,33 @@ experiments/ DISPOSABLE. Delete any of these without a second thought.</code></p
 <table><thead><tr><th>file</th><th>what it is</th></tr></thead><tbody>
 <tr><td><code>backend/config.py</code></td><td>settings, read once at import so a misconfigured machine fails immediately</td></tr>
 <tr><td><code>backend/models.py</code></td><td><strong>the only file that names a vendor.</strong> Every call that leaves this machine to reach a model: Bedrock for embeddings, Cohere for reranking. Swapping either means editing this file and nothing else</td></tr>
-<tr><td><code>backend/retrieval.py</code></td><td>the <strong>vector</strong> half — the search SQL, reranking, collapsing chunks to films, exact title lookup, and what a hard filter removed</td></tr>
-<tr><td><code>backend/graph.py</code></td><td>the <strong>exact</strong> half — facts, relationships, and availability. No model reaches this file</td></tr>
-<tr><td><code>backend/providers.py</code></td><td>the semantic layer: 34 US services with dated prices, sources and a <code>verified</code> flag. Owns <code>REGION</code></td></tr>
-<tr><td><code>backend/tools.py</code></td><td>what the agent is allowed to do. The docstrings <em>are</em> the interface — only they travel to the model</td></tr>
 <tr><td><code>backend/agent.py</code></td><td>the LangGraph loop: think → act → think → review. The conditional edge is the whole difference between a pipeline and an agent</td></tr>
 <tr><td><code>backend/api.py</code></td><td>HTTP over the <em>same compiled graph</em>. No prompts, no tools, no logic. If it and <code>backend/agent.py</code> ever disagree, one is a bug</td></tr>
 <tr><td><code>backend/tracing.py</code></td><td>one optional dependency, isolated, so neither half has to depend on the other to get it</td></tr>
 </tbody></table>
+<p><strong>Being rebuilt</strong> — deleted on 5 Sep 2026, to be written against the new corpus: the retrieval module (vector search, reranking, collapsing chunks to films), the knowledge-graph module (facts and relationships), the availability and pricing layer, and the tool definitions the agent is allowed to call.</p>
 <p><strong>The dependency direction never reverses:</strong></p>
 <pre><code>config ──▶ models ──▶ retrieval ──┐
    └─────▶ graph ─────────────────┼──▶ tools ──▶ agent ──▶ api
            providers ─────────────┘</code></pre>
-<p><code>backend/retrieval.py</code> and <code>backend/graph.py</code> share a database URL and nothing else — which is exactly why they are two files and not one. They were a single module — <strong>core</strong>, 786 lines doing five jobs — and every change to it put the whole repository in the blast radius. Retired on 30 Aug 2026.</p>
+<p>The vector half and the exact half share a database URL and nothing else — which is exactly why they are two files and not one. They were a single module — <strong>core</strong>, 786 lines doing five jobs — and every change to it put the whole repository in the blast radius. Retired on 30 Aug 2026, and the split is being kept through the rebuild.</p>
 <h3 id="the-other-folders">The other folders</h3>
 <table><thead><tr><th>file</th><th>what it is</th></tr></thead><tbody>
 <tr><td><code>pipeline/fetch_titles.py</code> · <code>pipeline/fetch_plots.py</code></td><td>pull raw data from external sources to disk</td></tr>
-<tr><td><code>pipeline/chunk_plots.py</code> · <code>pipeline/derive_corpus.py</code></td><td>turn raw text into chunks and derived descriptions</td></tr>
-<tr><td><code>pipeline/load_corpus.py</code> · <code>pipeline/load_derived.py</code></td><td>embed and write to Postgres</td></tr>
-<tr><td><code>pipeline/build_graph.py</code></td><td>derives the knowledge graph from <code>movies.raw_payload</code>. Idempotent; <code>--status</code> and <code>--remove</code></td></tr>
-<tr><td><code>evals/eval_variants.py</code> · <code>evals/eval_agent.py</code></td><td>the two harnesses. See <code>docs/verification.md</code></td></tr>
+<tr><td><code>pipeline/load_corpus.py</code> · <code>pipeline/load_plots.py</code></td><td>write films and their Wikipedia plots to Postgres. Both re-runnable</td></tr>
+<tr><td><code>pipeline/derive_corpus.py</code></td><td>a model writes each film's mood, theme and premise to a file for review. Writes no rows</td></tr>
+<tr><td><code>evals/eval_agent.py</code></td><td>the agent harness: tool accuracy, grounding, faithfulness. See <code>docs/verification.md</code></td></tr>
 <tr><td><code>scripts/repo_check.py</code></td><td>the structural checks CI runs. Standard library only</td></tr>
 <tr><td><code>scripts/build_docs.py</code></td><td>renders the markdown docs to HTML. <strong>The HTML is derived — never edit it</strong></td></tr>
-<tr><td><code>search.py</code></td><td>retrieval from the command line, no agent. The one entry point left at the root</td></tr>
-<tr><td><code>experiments/graph_vs_vector.py</code></td><td>the same factual question sent to both machines, side by side</td></tr>
+<tr><td><code>search.py</code></td><td>retrieval from the command line, no agent <em>(being rebuilt)</em></td></tr>
+<tr><td><code>experiments/</code></td><td>empty, and that is correct. It is the one folder meant to be thrown away</td></tr>
 </tbody></table>
 <p><strong>Run everything from the repository root, as a module:</strong></p>
-<pre><code class="lang-bash">python -m backend.tools           # the spec the model receives, then real calls
-python -m backend.graph           # facts and availability, no model involved
-python -m backend.retrieval       # the vector path, scored
-python -m pipeline.build_graph --status
+<pre><code class="lang-bash">python -m pipeline.derive_corpus   # write mood, theme and premise to data/derived.json
 python -m evals.eval_agent
 python -m scripts.repo_check
-uvicorn backend.api:app --reload --port 8000</code></pre>
-<p><strong>One caution.</strong> <code>backend/api.py</code> parses <code>backend/tools.py</code>'s plain-text output with a regular expression, so changing the tool's wording can silently break the web display with no error anywhere.</p>
+python -m scripts.build_docs</code></pre>
+<p><strong>One caution, for when the tools return.</strong> <code>backend/api.py</code> parses the tool layer's plain-text output with a regular expression, so changing a tool's wording can silently break the web display with no error anywhere.</p>
 <hr>
 <h2 id="requirements">Requirements</h2>
 <ul>
@@ -184,13 +182,13 @@ graph_edges        one row per fact     from_key · to_key · edge_type · sourc
 <h3 id="4-build-the-corpus">4. Build the corpus</h3>
 <p>No film data is committed. TMDB's payloads are licensed to them, Wikipedia's text is CC BY-SA, and embeddings are derived data that go stale the moment a model changes. <strong>Keep the raw thing, derive everything else from it.</strong> Run these in order:</p>
 <pre><code class="lang-bash">python -m pipeline.fetch_titles      # TMDB → data/raw/tmdb_*.json            (needs TMDB_READ_TOKEN)
-python -m pipeline.fetch_plots       # IMDb id → Wikidata → Wikipedia plots   → data/plots.json
-python -m pipeline.load_corpus       # films + overview chunks                → Postgres
-python -m pipeline.derive_corpus     # a model writes mood/theme text         → data/derived.json
-python -m pipeline.load_derived      # derived text → chunks + embeddings
-python -m pipeline.chunk_plots       # semantic → recursive → overlap chunking, embeds each chunk
-python -m pipeline.build_graph       # films · people · genres · keywords → nodes + edges</code></pre>
-<p><code>pipeline/chunk_plots.py</code> is resumable: it commits per film and caches vectors by content hash, so a rate limit costs time, never finished work. Re-run it and it continues.</p>
+python -m pipeline.fetch_plots       # Wikidata → Wikipedia plots             → data/plots.json
+python -m pipeline.load_corpus       # films                                  → Postgres
+python -m pipeline.load_plots        # plots, matched on tmdb_id, never title → Postgres
+python -m pipeline.derive_corpus     # a model writes mood/theme/premise      → data/derived.json</code></pre>
+<p>Both loaders are safe to run twice: <code>load_corpus</code> skips films already present, <code>load_plots</code> reports "loaded", "no plot" and "unmatched" as three separate counts so you can see which one happened.</p>
+<p><strong>Read <code>data/derived.json</code> before anything consumes it.</strong> That is the entire reason <code>pipeline/derive_corpus.py</code> writes a file instead of rows — bad text inside a vector is invisible, bad text in a file is obvious. A partial run (<code>--limit</code>, <code>--titles</code>) writes <code>data/derived.sample.json</code> so half a corpus can never be mistaken for a whole one.</p>
+<p><strong>Still to come:</strong> loading the derived text, chunking the plots, embedding, and building the knowledge graph. Those steps are being rewritten against the new schema.</p>
 <blockquote><strong>Wikimedia may refuse an automated fetch</strong> under its robot policy. If <code>pipeline/fetch_plots.py</code> returns 403s the plots have to be gathered another way; everything downstream is unaffected.</blockquote>
 <hr>
 <h2 id="running-it">Running it</h2>
@@ -215,16 +213,17 @@ python -m pipeline.build_graph       # films · people · genres · keywords →
 <hr>
 <h2 id="evaluation">Evaluation</h2>
 <p>Two harnesses, measuring two different things.</p>
-<pre><code class="lang-bash">python -m evals.eval_variants     # RETRIEVAL: achievable@3 and quiet@3 over a 25-case golden set
-python -m evals.eval_agent        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
-python -m pytest tests -q   # THE MATHS: no model, no database, 0.6 seconds</code></pre>
+<pre><code class="lang-bash">python -m evals.eval_agent        # THE AGENT: tool accuracy, grounding, RAGAS faithfulness
+python -m pytest tests -q         # THE MATHS: no model, no database, 0.6 seconds</code></pre>
+<p><strong>The retrieval harness and its 25-case golden set were deleted on 5 Sep 2026.</strong> The judgement it automated — does this film actually feel the way the query asked for — is being made by hand while the corpus is rewritten, one query at a time. It returns when there is a retrieval path to measure.</p>
 <p><strong>Faithfulness is reported and never gated on.</strong> Two identical runs with no code change scored 0.78 and 0.72; within one run a single case scored 0.86 / 0.33 / 0.86 on three draws of the same answer. Treat anything under 0.10 as unresolvable. Gate on the deterministic; report the rest.</p>
 <p><strong>Reproduce CI's conditions before pushing:</strong></p>
 <pre><code class="lang-bash">env -i HOME="$HOME" PATH="$PATH" .venv/bin/python -m pytest tests -q</code></pre>
 <p><code>env -i</code> wipes the environment, which is the blank slate a CI runner gets. A normal run inherits everything you exported from <code>.env</code> and will lie to you — that is exactly how a wrong variable name passed locally and failed on the first clean machine.</p>
-<p><code>evals/eval_variants.py</code> cannot see the agent at all. <code>evals/eval_agent.py</code> measures the three ways a loop can be wrong that a retrieval eval structurally cannot detect: the wrong tool, a film no tool returned, and claims the retrieved text does not support.</p>
+<p>A retrieval harness cannot see the agent at all. <code>evals/eval_agent.py</code> measures the three ways a loop can be wrong that a retrieval eval structurally cannot detect: the wrong tool, a film no tool returned, and claims the retrieved text does not support.</p>
 <p><strong>Only one metric uses an LLM.</strong> Tool choice is a string comparison; grounding is a set difference. Both are deterministic, free, and cannot drift. Faithfulness has no exact test, so — and only it — goes to a judge, and the judge is deliberately not the model under test.</p>
-<h3 id="current-numbers">Current numbers</h3>
+<h3 id="numbers-from-the-previous-build-august-2026">Numbers from the previous build — August 2026</h3>
+<p><strong>These were measured against a corpus and a retrieval path that no longer exist.</strong> They are kept as the record of what that build achieved and what it cost, not as a claim about today. Nothing here is reproducible until retrieval is rebuilt.</p>
 <table><thead><tr><th>metric</th><th>value</th><th>meaning</th></tr></thead><tbody>
 <tr><td>achievable@3</td><td><strong>89.3%</strong> (25/28)</td><td>of the expected films that <em>can</em> fit in a top 3, how many do</td></tr>
 <tr><td>quiet@3</td><td><strong>0.2232</strong></td><td>top score on queries with no right answer — <strong>lower is better</strong></td></tr>
@@ -234,16 +233,9 @@ python -m pytest tests -q   # THE MATHS: no model, no database, 0.6 seconds</cod
 </tbody></table>
 <p>Two metrics, never one: anything that makes the system eager raises recall <strong>and</strong> false confidence.</p>
 <p><strong>Why <code>achievable@3</code> rather than plain recall@3.</strong> One case in the golden set names four films, so raw recall@3 cannot reach 100% however good retrieval gets. Dividing by <code>sum(min(len(expect), 3))</code> removes a penalty the system cannot avoid.</p>
-<p><strong>The numbers above are arm D</strong> — the context header stored in the vector, which is what runs in production. Arm B (header everywhere) scores higher on achievable@3, <strong>92.9%</strong>, and worse on quiet@3, <strong>0.2543</strong> vs 0.2232. That is the trade in one line: the arm that finds more also asserts more on questions with no answer. Run <code>python -m evals.eval_variants</code> to see all four.</p>
+<p><strong>The numbers above are arm D</strong> — the context header stored in the vector. Arm B (header everywhere) scored higher on achievable@3, <strong>92.9%</strong>, and worse on quiet@3, <strong>0.2543</strong> vs 0.2232. That is the trade in one line: the arm that finds more also asserts more on questions with no answer.</p>
 <h3 id="experiments">Experiments</h3>
-<p><code>experiments/</code> holds the diagnostics that produced those numbers — not dead code:</p>
-<table><thead><tr><th>file</th><th>the question it answers</th></tr></thead><tbody>
-<tr><td><code>why_chunk.py</code></td><td>which chunk won, and did the quota even admit it?</td></tr>
-<tr><td><code>corpus_ablation.py</code></td><td>what is each corpus worth? (leave-one-out)</td></tr>
-<tr><td><code>db_audit.py</code></td><td>read-only schema, row counts, integrity checks</td></tr>
-<tr><td><code>genre_corpus.py</code></td><td>the genre-as-corpus experiment — add, measure, remove</td></tr>
-<tr><td><code>mood_audit.py</code></td><td>which films dominate mood queries, and are they ever right?</td></tr>
-</tbody></table>
+<p><code>experiments/</code> is <strong>empty</strong>, which is the correct state for it. It is the one folder in the repository meant to be thrown away — a diagnostic that has answered its question is finished, and the answer belongs in <code>docs/decisions.md</code>, not in a script nobody will run again. The diagnostics that produced the numbers above were deleted on 5 Sep 2026 along with the corpus they measured.</p>
 <hr>
 <h2 id="continuous-integration">Continuous integration</h2>
 <p><code>.github/workflows/ci.yml</code> runs on every pull request. Four jobs, four different questions:</p>
@@ -251,10 +243,10 @@ python -m pytest tests -q   # THE MATHS: no model, no database, 0.6 seconds</cod
 <table><thead><tr><th>job</th><th>what it asks</th></tr></thead><tbody>
 <tr><td><strong>Structure</strong></td><td>Does every module parse? Is every third-party import pinned? Does <code>.env.example</code> match what the code reads? Does any doc point at a file that doesn't exist? Has anything secret-shaped been committed? Does <code>.gitignore</code> protect <code>.env</code> without swallowing a schema file? Does every import of our own code point at a module that still exists there?</td></tr>
 <tr><td><strong>Dependencies</strong></td><td>Does <code>requirements.txt</code> actually install on a clean machine, and does the third-party stack import?</td></tr>
-<tr><td><strong>Unit tests</strong></td><td>Is the maths right? The damped sum against hand-computed numbers, price banding, and whether <code>pipeline/build_graph.py</code> and <code>graph_schema.sql</code> still agree about edge types</td></tr>
+<tr><td><strong>Unit tests</strong></td><td>Is the wiring right? An empty model reply is refused at the door, the result panel shows only films the agent actually named, <code>requirements-runtime.txt</code> covers every <code>backend/</code> import, and nothing outside <code>backend/models.py</code> names a vendor</td></tr>
 <tr><td><strong>Front end builds</strong></td><td>Do <code>backend/api.py</code> and the React app still agree about their data? <code>npm run build</code> runs <code>tsc --noEmit</code> first, so a mismatch fails the pull request rather than the browser</td></tr>
 </tbody></table>
-<p>A fifth workflow, <code>.github/workflows/staleness.yml</code>, runs <strong>on a schedule</strong> rather than on a change: it reads the date stamped in <code>backend/providers.py</code> and opens an issue when prices pass 30 days old. Nothing in a repository changes when Apple raises a price — only the calendar knows.</p>
+<p>A fifth workflow, <code>.github/workflows/staleness.yml</code>, runs <strong>on a schedule</strong> rather than on a change: it reads the date stamped in the pricing layer and opens an issue when prices pass 30 days old. Nothing in a repository changes when Apple raises a price — only the calendar knows. <em>(Idle while the pricing layer is being rebuilt.)</em></p>
 <p><strong>CI holds no credentials and never will.</strong> A workflow with your AWS keys is a workflow that can leak them, and a pull request from a fork could read them.</p>
 <p>The old line here said <em>CI checks structure, the evals check behaviour</em>. That stopped being true when <code>tests/</code> arrived. The honest version: <strong>CI checks everything that gives the same answer every time; the evals check the rest</strong>, on a machine that already has the keys.</p>
 <p><strong>A green build is not a working system.</strong> Switching the critic off left a routing function returning a value the graph had not been told to expect, so every request returned 500 — and all four checks passed, because the file still parsed and no unit test touches the graph. Re-run the thing you changed.</p>
@@ -326,8 +318,8 @@ docker push &lt;account&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com/moviemotions:vN
 <hr>
 <h2 id="known-weaknesses">Known weaknesses</h2>
 <ul>
-<li><strong>Mood queries rank the wrong films.</strong> <em>"warm, comforting, rainy evening"</em> returns prison dramas. The corpus describes what <em>happens</em>, never how a film <em>feels</em> — a corpus problem, not a query or threshold problem.</li>
-<li>~~<strong>Rerank scores are not stable run to run.</strong>~~ <strong>Retracted 26 Aug 2026 — this was wrong.</strong> Measured: the same query run twice returns identical scores to four decimal places, and <code>evals/eval_variants.py</code> has reproduced exactly on separate days. <code>cohere/rerank-v3.5</code> also has exactly one provider on OpenRouter, so there is no backend to route between. The claim came from one genre experiment that scored 96.6% once and 86.2% twice; the corpus was being changed at the time, which explains it far better than the model did.</li>
+<li>~~<strong>Mood queries rank the wrong films.</strong>~~ <em>"warm, comforting, rainy evening"</em> returned prison dramas, because the corpus described what <em>happens</em> and never how a film <em>feels</em> — a corpus problem, not a query or threshold problem. <strong>This diagnosis is what caused the September 2026 rebuild</strong>: every film now carries a written mood, theme and premise. Unproven until retrieval exists again.</li>
+<li>~~<strong>Rerank scores are not stable run to run.</strong>~~ <strong>Retracted 26 Aug 2026 — this was wrong.</strong> Measured: the same query run twice returns identical scores to four decimal places, and the retrieval harness reproduced exactly on separate days. <code>cohere/rerank-v3.5</code> also has exactly one provider on OpenRouter, so there is no backend to route between. The claim came from one genre experiment that scored 96.6% once and 86.2% twice; the corpus was being changed at the time, which explains it far better than the model did.</li>
 <li><strong>The graph is thin on people.</strong> Only 3 directors and 7 actors appear in more than one film, so "another film by this director" works for three directors. A graph's value scales with shared nodes, and 20 films is a small world.</li>
 <li><strong>Answer quality is at the small-model floor.</strong> The agent model is strong at structured decisions and weak at prose. <code>BEDROCK_MODEL_AGENT</code> is the seam for swapping it.</li>
 </ul>

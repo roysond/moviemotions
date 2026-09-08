@@ -235,7 +235,7 @@ no vendor knows your business rules.*
 |---|---|
 | **The offer type lives in the EDGE TYPE, not in `properties`** | Amazon both rents and sells Alien: two different facts about the same pair. The UNIQUE constraint keys on (from, to, type, source), so as a property the database would silently keep one and discard the other. **A difference that matters must sit where uniqueness is enforced** |
 | **The country lives in the edge's `source` (`tmdb:US`)** | "TMDB's US listing" and "TMDB's UK listing" are different claims. Adding a second country later cannot overwrite the first |
-| **The database keeps TMDB's mess; `backend/providers.py` tidies at display time** | TMDB reports four separate Paramount+ entries for one thing a person calls Paramount+, and "Apple TV" beside "Apple TV Store" for a subscription and a shop. Storage stays faithful, presentation gets to be sensible. Keep the raw thing |
+| **The database keeps TMDB's mess; the pricing layer tidies at display time** | TMDB reports four separate Paramount+ entries for one thing a person calls Paramount+, and "Apple TV" beside "Apple TV Store" for a subscription and a shop. Storage stays faithful, presentation gets to be sensible. Keep the raw thing |
 | **Every price carries a date and a source, and unverified ones say so** | Apple TV moved $12.99 → $14.99 on the day the file was written. 12 of 34 could not be confirmed from an official page and are marked, never guessed |
 | **A semantic layer is born from a screen, not from an architecture diagram** | It was an abstract roadmap item for weeks. It became necessary the moment a panel had to show "Paramount+" four times |
 | **Bands, never one sorted list** | $3.99 once and $8.99 a month are not the same kind of cost. A numeric sort puts the rental first and misleads. Free → Subscription → Rent → Buy → Needs a TV provider, cheapest within each |
@@ -243,7 +243,7 @@ no vendor knows your business rules.*
 | **Rent and buy are shown as "from $x"** | TMDB publishes no per-film price. The mockup said "$3.99" flat, which invented a precision we do not have |
 | **The panel fills from the DRAFT, not after approval** | The human-in-the-loop pause is for reviewing the WORDING. Hiding the evidence until after approval gets it backwards |
 | **The panel may only show films the agent named, and not ones it named to reject** | Same grounding rule the agent works under. It once showed Jurassic Park as pick #1 of an answer that said "…but are not Jurassic Park" |
-| **`REGION` is defined once, in `backend/providers.py`** | A constant written down twice is a constant that will eventually disagree with itself |
+| **`REGION` is defined once, in the pricing layer** | A constant written down twice is a constant that will eventually disagree with itself |
 | **A function that fetches its own input cannot be tested cheaply** | `films_mentioned` took a database call; it now takes a list. Same behaviour, injectable |
 | **Fixed pixels for the poster and its column; the offer list absorbs the resize** | A poster that scales with the window makes the row feel unstable, and the title and poster have a *correct* size. Only the offer list genuinely reads fine narrower |
 | **No structural breakpoints in the UI** | A narrow window gets a smaller version of the same layout, never a different one |
@@ -282,7 +282,7 @@ changed. Two were already good, one does not apply, two were violated.
 
 | principle | verdict | what was done |
 |---|---|---|
-| **S** single responsibility | **violated** — the single **core** module was 786 lines and 14 functions doing embedding, retrieval, reranking, the knowledge graph, availability and filter reporting. The neighbours map said "change this → re-test everything", which is the cost written down | split into `backend/config.py`, `backend/models.py`, `backend/retrieval.py`, `backend/graph.py` and `backend/tracing.py`. The vector half and the exact half shared a database URL and nothing else |
+| **S** single responsibility | **violated** — the single **core** module was 786 lines and 14 functions doing embedding, retrieval, reranking, the knowledge graph, availability and filter reporting. The neighbours map said "change this → re-test everything", which is the cost written down | split into `backend/config.py`, `backend/models.py`, `backend/tracing.py` and separate retrieval and knowledge-graph modules. The vector half and the exact half shared a database URL and nothing else |
 | **O** open/closed | **already good, and deliberate** — a new tool is a row in `TOOLS`, a new price a row in `SERVICES`, a new offer type a row in `OFFER_EDGE`, a new doc a row in `PAGES` | left alone. Extending by adding data rather than editing logic is the principle working |
 | **L** Liskov substitution | **not applicable** — five classes in the repo, zero inheritance. Claiming a pass would be theatre | nothing. Recorded so the gap is a decision, not an oversight |
 | **I** interface segregation | **the strongest part** — each tool takes exactly the arguments its job needs. Not merely clean: narrow, non-overlapping interfaces are what make the model route correctly. A single `do_movie_stuff(**kwargs)` would work in Python and fail as an agent | left alone |
@@ -291,7 +291,7 @@ changed. Two were already good, one does not apply, two were violated.
 | Decision | Why |
 |---|---|
 | **One folder per LIFECYCLE, not per topic** | 17 files in the root had six different lifecycles mixed together. `backend/` runs in production, `pipeline/` builds the corpus by hand, `evals/` needs credentials, `scripts/` is dev tooling, `tests/` is permanent, **`experiments/` is the only folder meant to be deleted** |
-| **`backend/models.py` is the only file that names a vendor** | Swapping Bedrock or Cohere means editing one file. `backend/retrieval.py` asks for `embed(text)` and does not know who answers. The roadmap called this `EmbeddingProvider`; this is the same idea with less ceremony |
+| **`backend/models.py` is the only file that names a vendor** | Swapping Bedrock or Cohere means editing one file. The retrieval module asks for `embed(text)` and does not know who answers. The roadmap called this `EmbeddingProvider`; this is the same idea with less ceremony |
 | **A module boundary instead of an abstract class** | One implementation does not justify an interface. The dependency still points inward, and nothing above `backend/models.py` names a vendor — which was the actual goal |
 | **Three of the five promised seams are dropped on purpose** | `MovieDataSource`, `LLMProvider` and `Retriever` are YAGNI until a second implementation exists. Written down so the gap reads as judgement rather than oversight. `EmbeddingProvider` was the one with teeth — changing the embedding model means re-embedding the corpus — and it is now `backend/models.py` |
 | **Everything runs from the root as a module** — `python -m backend.tools` | One rule for every entry point, no `sys.path` juggling for the reader, and the same commands work in CI |
@@ -336,9 +336,13 @@ changed. Two were already good, one does not apply, two were violated.
 | **`gemini-2.5-pro` over `gemini-3.1-pro-preview`** | Preview can change without warning. A model that silently rewrites your corpus later is not one you can promote, however good it is today |
 | **Model first, input second — never both** | Deriving mood from the plot as well as the overview is a second variable. Two clean measurements, or an unattributable one |
 
-### Storage — the fact that sets the ceiling
+### Storage — the fact that sets the ceiling  ·  SUPERSEDED 5 Sep 2026
 
-`pipeline/load_derived.py` glues `feel`, `moods` and `themes` into **one paragraph and one vector**. The
+> **This block describes the design that the September rebuild replaced.** It is kept because the
+> ceiling it identifies is *why* the rebuild happened, and because the open proposal at the end of
+> it is still the open question. See "RAG rebuild" below for what replaced it.
+
+The old loader glued `feel`, `moods` and `themes` into **one paragraph and one vector**. The
 individual moods cease to exist as data at that point. "Which films have the mood *panic*" is
 not a question the database can answer.
 
@@ -350,6 +354,153 @@ column on `movies` rather than a table, and one extra argument on `find_films_by
 than three new tools. Blocked on a decision only Royson can make — **writing the fixed mood
 vocabulary**, the way TMDB fixed the 19 genres. Free-text moods cannot be looked up; nobody will
 ever type "sea peril".
+
+---
+
+## RAG rebuild — corpus and retrieval design, 5–7 September 2026
+
+The corpus was demolished and rebuilt. `feel`, `moods` and `themes` are gone, and so is the
+loader that glued them into one paragraph. Three fields replace them, written by one model call
+per film. **This section supersedes "Storage — the fact that sets the ceiling" above.**
+
+### The three derived fields
+
+| Decision | Why |
+|---|---|
+| **`mood_feel`, `theme`, `premise` — three fields, ONE call** | They change for the same reason: Royson decided the text should say something different. Three calls would cost 3x per run and buy independent tuning nobody wants yet. Split `premise` out the day it needs its own model, not before |
+| **One file, five NAMED prompt blocks — not one file per field** | A file per field is SRP applied at the wrong grain: all three change together because the taste behind them is one taste. Named blocks give the same "edit one concept in one clearly labelled place" without three imports |
+| **A partial run never writes `data/derived.json`** | Half a corpus in the real file looks exactly like a whole one, and nothing downstream can tell the difference. `--limit` and `--titles` write `data/derived.sample.json` instead |
+| **`premise` is the DISPLAY surface; `theme` and the plot scenes are MATCHING surfaces** | You never have to classify spoilers if spoilers never reach the screen |
+| **`theme` is matching-only and is NEVER shown to a user** | The prompt was pushed twice to make it spoiler-free and moved the wording without moving the fact. For Get Out the underlying idea *is* the twist, so the only safe theme is a vague one — and a vague theme vector matches everything, which is the same as matching nothing. **Placement solved what prompting could not** |
+| **The spoiler rule had to ban the DESTINATION, not just events** | "Builds toward a feeling of earned liberation" and "learns to care for its human charge" name no event and give the ending away anyway. Forbidding events left the arrival point wide open |
+| **`mood_feel`: one feeling, plain word first, no plot clause** | A mood that continues "…as an unseen threat stalks its prey" puts plot words inside the one field that exists to hold none. And a sentence leaning two ways leans strongly at neither, so a one-word query for either feeling misses both |
+| **A prompt cannot fix a CORPUS-LEVEL property** | Each film is derived in its own call, so the model cannot know it already opened four films with "Frantic". Measured: 13 distinct opening words across 20 films, half the corpus sharing one. Repetition is a property of the FILE; the prompt only ever sees ONE FILM. Any fix is a second pass over the finished file, or acceptance |
+| **Judge a corpus by counting, not by reading down the terminal** | Reading the 20-film output missed two entries that named a character and one that named two feelings. A ten-line script found all three, and also proved that two of my own flags were the checker being wrong |
+| **`text_of()` — a model reply is not always a string** | Gemini returns a list of content blocks. `str(list)` yields Python's repr, `json.loads` then fails at character 2, and it reads exactly as though the MODEL had misbehaved. It had not |
+
+### Two model roles, two switches
+
+| Decision | Why |
+|---|---|
+| **`AGENT_PROVIDER` and `DERIVE_PROVIDER`, never one `LLM_PROVIDER`** | With a single switch, reaching for a better *writer* also moved the live agent. The two jobs have opposite constraints: the agent has a person waiting, the deriver has nobody and only quality counts |
+| **`backend/models.py` holds ONE private builder and two named wrappers** | `chat_model()` and `derive_model()` differ only in which config they hand over. The role name travels into the error text, so a failure says WHICH job could not start |
+| **A prompt file never names a vendor** | `pipeline/derive_corpus.py` asks for a model and does not know who answers. `tests/test_seam.py` is what keeps that true |
+
+### The `movies` table
+
+| Decision | Why |
+|---|---|
+| **`movie_id` is the primary key; `tmdb_id` is merely UNIQUE** | The surrogate key protects the ROW, the natural key protects the FILM. `source` and `source_id` were deleted along with the idea that an identifier could belong to a provider |
+| **Columns sourced from TMDB carry a `tmdb_` prefix** | `tmdb_overview`, `tmdb_raw_payload`. The column name states its provenance, so nobody has to remember it |
+| **Postgres cannot reorder columns — recreate and copy, inside `BEGIN … COMMIT`** | Dragging columns in a client changes the client's view and not the table. And a create/copy/drop that half-completes leaves a worse state than one that fails outright |
+| **Every loader is safe to re-run — `ON CONFLICT (tmdb_id) DO NOTHING`** | Proven live: a second run of `pipeline/load_corpus.py` printed `inserted 0, skipped 20` |
+| **Plots are matched on `tmdb_id`, never on title** | Titles collide, and remakes share them exactly — the corpus holds *The Karate Kid (2010)*, not the 1984 film. Proven live: `loaded 20 · no plot 0 · unmatched 0` |
+| **`pipeline/load_plots.py` reports three outcomes separately** | "Loaded", "no plot available" and "no matching film" fail for different reasons and need different fixes. One combined number hides which one happened |
+
+### "Similar to X"
+
+| Decision | Why |
+|---|---|
+| **Reuse X's STORED vectors; do not rebuild a text query out of X's fields** | X's mood vector already *is* the point to search around. Re-describing X and re-embedding costs a call and lands somewhere slightly different, for nothing |
+| **Never inherit X's hard facts** — year, runtime, cast, crew, language, keywords | "Similar to Alien" carrying 1979 asks for 1979 films and deletes the answer. Only the FEELING is inherited |
+| **`premise` sits out of "similar to", but does the work when a user DESCRIBES a film** | A premise is a setup, so it finds the same *situation* rather than the same *feeling*. Same field, two jobs — and the job is chosen by the shape of the question |
+| **Whatever the USER says wins; whatever they don't say is copied from the film** | One rule covers both mixed cases: "similar to Alien but funnier" takes mood from the user and theme from Alien; "similar to Alien from the last 10 years" takes both from Alien and adds a year wall. No special case needed |
+| **Sequels are excluded, and the user is TOLD they were** | Toy Story 2 is the most similar film to Toy Story and the least useful answer, because they have seen it. Verified in the stored payload: 15 of 20 films carry `belongs_to_collection.name`, and the 5 blanks are genuinely standalone films |
+| **Genre gets NO hard filter — and the decision was made by DEFERRING it** | Either genre mirrors mood, in which case a wall adds a noisy label and no information; or it does not, in which case the wall deletes correct answers. A submarine film that feels like Alien is exactly what this app exists to find and exactly what a genre wall removes |
+| **Only agonise over decisions that are EXPENSIVE to reverse** | Genre-as-wall versus genre-as-bonus is one line in scoring, changeable forever. Table shape is not. And at 20 films a wall and a bonus return identical results, so deciding today would be guessing where evidence arrives later |
+
+---
+
+## Retrieval rebuilt, and the law it kept breaking — 7 September 2026
+
+The corpus grew a fourth surface, the search was written from scratch, and the same
+mistake was found three times in one day wearing three different disguises.
+
+### THE LAW: a cosine is comparable within ONE kind of text and meaningless across two
+
+| Decision | Why |
+|---|---|
+| **Scores are compared by RANK WITHIN A KIND, never as raw numbers across kinds** | Measured on one query: scenes scored 0.338-0.508, premises 0.457-0.569, themes 0.513-0.561. Not overlapping ranges — different SCALES. Any operation putting two kinds side by side inherits the offset |
+| **Caught three times in one day, and it looked like three different bugs** | `min(mood, theme)` was ALWAYS the theme score, so "similar to X" was decided entirely by theme and never by mood. `max(premise, scene)` was ALWAYS the premise, so **1 film in 20** had its best scene beat its own premise and the 148-row scene corpus was never in the competition. Both were one bug |
+| **Theme is a weak discriminator, and the reason generalises** | Toy Story's nearest theme in the catalogue is TITANIC at 0.827 — both are built as "not status, but X". Abstract moral statements resemble each other; sensory concrete sentences do not. **Things match when they are at the same level of abstraction**, which is also why an abstract query finds a summary rather than the scene it describes |
+| **"similar to X" seeds from MOOD only** | Mood alone ranks Finding Nemo and Home Alone top for Toy Story — the two answers a person gives. Adding theme replaced them with Mortal Kombat |
+| **RANK says which film is best. It cannot say whether ANY of them is good** | With twenty films the winner is rank 1.00 whether it fits perfectly or not at all. So each film also carries its raw score and its margin over the bottom of its own band. A number that always looks like confidence is not a measurement |
+| **There is no usable score THRESHOLD in this space** | Unrelated text scores about 0.64 for a mood query and nothing ever scores below 0.6. The previous build's "refuse under 0.25" could never fire. Calibration has to come from the field this query produced, never from a number chosen once |
+| **A floor needs a field deep enough to have a bottom** | After a hard filter leaves three films, the worst of three is not "unrelated", it is just third. Below eight candidates no margin is reported and the caller is told why, rather than handed a number that means nothing |
+
+### Plot scenes
+
+| Decision | Why |
+|---|---|
+| **A whole new corpus needed NO schema change** | 148 scenes went into `movie_data` as `data_kind = 'plot_scene'`, `seq = 1..n`, and their vectors into `movie_vectors` like every other vector. That is the tall-table decision earning its keep: had the three derived fields been columns on `movies`, scenes would have needed a second table, a second loader and a second embedder |
+| **Semantic cut, then recursive, then overlap — in that order** | Cut where the meaning changes; split anything still over the cap at its own biggest internal drop; overlap ONLY the seams the cap forced. At a real meaning boundary, repeating a sentence blurs two distinct scenes — overlap repairs damage, it is not a default |
+| **The break threshold is a PERCENTILE of each plot's own joins** | "Split below 0.8" dies on a model swap and would cut every sentence in this space, where unrelated text sits at 0.64. Each plot is scored against itself |
+| **When the rules conflict, the SIZE CAP wins** | No scene over 900 characters, none under 200, never cut where the meaning held — a short segment between two full ones breaks one of them whichever way it moves. An oversized chunk averages several events and matches none of them sharply, which is the failure chunking exists to prevent; a short one is merely weak |
+| **A merge looks backwards AND forwards** | Merging only into the previous scene produced a 53-character orphan whose neighbour was already full. Both directions, and if neither has room the short scene stands |
+| **A re-cut deletes the scenes it no longer believes in** | Nine scenes replacing twelve leaves three embedded, findable rows describing a chunking that no longer exists |
+| **`plot_scene` is a MATCHING surface, never a display one** | A scene from the third act is the sharpest thing to search and the least safe to print. Same rule as theme, enforced in the same `DISPLAYABLE` set rather than in an instruction someone has to remember |
+| **A generic chunk is a universal weak match** | Get Out's cold open — "a man walks alone at night, talking on the phone" — was the top-scoring scene in the catalogue for four unrelated queries. Text with no distinctive vocabulary sits near the middle of the space, and the middle is close to everything. Not a scoring bug; a property of that row |
+
+### The tool layer
+
+| Decision | Why |
+|---|---|
+| **TWO tools, not three: "similar to" is an ARGUMENT** | "Like Alien, but funnier" needs a comparison film AND a mood in the SAME call. Two separate tools cannot express that sentence at all — the model would have to pick one half and discard the other. **Where two tools would always have to be called together, they were one tool** |
+| **A typed constraint ADDS to a seeded one; it does not replace it** | "But funnier" is a modification, not a replacement. Replacing gave a plain list of funny films with nothing of Alien left in it |
+| **Two constraints of the same kind may be combined; two of different kinds may not** | "Like Alien" and "funny" are both mood comparisons, so they share a scale and taking the minimum is honest. That is the same law as above, used the other way round |
+| **Withheld evidence is DECLARED, never silently absent** | A film returned with a score and no reason is a gap, and a gap is filled from the model's training. When the matched text may not be shown, the tool says so explicitly and forbids inventing it |
+| **Both display surfaces are returned every time, whichever kind matched** | A film returned with only its premise leaves nothing to say except the plot — and "say why it fits, do not retell the plot" is then an impossible instruction. The rule and the data contradicted each other, and the data won |
+
+### The agent, and the limits of a prompt
+
+| Decision | Why |
+|---|---|
+| **An EXAMPLE in a prompt gets FILLED IN, not imitated** | A worked "right answer" naming one film produced a factually false sentence about a different one — the model swapped the title and kept the description. Recorded once before about docstrings; it cost a whole answer to learn again. **No prompt in this repository names a film** |
+| **Adding rules to a saturated prompt makes it worse** | Four rewrites, each longer, each fixing one behaviour and losing another. The prompt was cut roughly in half and the rules made mechanical — "the first characters you write are a film's title" rather than "do not write an opening sentence" |
+| **Formatting is deterministic, so CODE owns it** | Three prompt attempts failed to remove an opening sentence. It is now stripped after the fact — the same split as the critic: the model writes, the code edits |
+| **A guarantee placed on an optional code path is not a guarantee** | That stripper was first written inside the critic node. `CRITIC_ENABLED = False`. It had never run once, and was reported as tested |
+| **The model chooses tools well and writes badly, and those are separable** | Correct tool every time, `similar_to` set correctly, two arguments combined in one call, a refusal on an unanswerable query — while copying its own tool output back as the answer. The split that already exists for AGENT and DERIVE applies one level down |
+
+### Verification and the shape of the code
+
+| Decision | Why |
+|---|---|
+| **`backend/vectors.py` holds the two facts both sides must agree on** | The variant string and the literal format. Written twice, they would eventually disagree, and the failure is silent: the writer stores vectors under one name and the reader looks for another, so search returns nothing at all |
+| **`pipeline/embed_data.py` asks the DATABASE what is missing** | Rather than being told what to embed. A row with no vector IS the definition of work outstanding, which makes the script resumable by nature and meant 148 plot scenes were picked up with no change to it at all |
+| **`search.py` exists to separate two suspects** | When an answer is wrong, either retrieval found the wrong films or the model wrote badly about the right ones. One command, no model, and you know which before anything is changed |
+| **A test that fails for the WRONG reason trains you to ignore red** | Three failures after the rebuild: one was a real regression — `search()` had lost its `@traceable` and every search would have been an opaque box — and two named modules and variables deleted days earlier. The first was fixed in the code, the other two in the tests |
+| **A long-running process holds the code it imported** | Two rounds of "the fix did not work" were a server and a prompt still running the module they loaded at startup. Restart before believing a result |
+| **The regex in `backend/api.py` is the only thing joining the tool's prose to the screen** | Nothing type-checks it. Change a tool's wording and the panel silently empties — no error, no crash. It has broken twice. It is the first place to look when the display goes blank |
+| **A trace that lies is worse than no trace** | The UI printed "pgvector cosine over chunks + chunk_embeddings → Cohere rerank → damped sum" for weeks after none of those existed. Same failure as the review panel that ate newlines: a surface that misreports manufactures disagreement nobody can see |
+
+---
+
+## The reranker, and the writer split — 8 September 2026
+
+| Decision | Why |
+|---|---|
+| **Vector rank chooses WHICH text represents a film; the reranker chooses the ORDER** | A cross-encoder reads the query and the document together and judges relevance directly, so its scores are comparable between a premise and a plot scene — which cosine is not. It solves the band problem as a side effect of doing its actual job |
+| **The reranker is the FINAL ranker, not a signal to blend** | Blending a calibrated relevance score into an uncalibrated distance would destroy the only property that makes it useful |
+| **A rerank score is the first number in this project that means something ON ITS OWN** | Measured across eight queries: a query with a real answer tops 0.3 and often 0.5 — Predator 0.711, Home Alone 0.551, Finding Nemo 0.521. A query with no answer here leaves the whole field under 0.1. Every earlier attempt at a threshold failed because cosine has no absolute meaning and rank always makes the winner look perfect |
+| **The rerank query must carry EVERY constraint, not just the typed ones** | Built from the typed text alone, "similar to Alien, but funny" asked the reranker only for "funny" and returned the film scoring WORST on the Alien half at number one — the vector stage had it 18th and was right. **A final ranker given a partial query does not refine the earlier work, it discards it** |
+| **The reranker reads text the user may never see** | It ranks on the strongest matched row, third-act scene included, and that text is stripped before anything renders. Internal evidence and displayable evidence are different questions |
+| **Vendor outage costs QUALITY, never AVAILABILITY** | A failed rerank falls back to vector order with a note saying so |
+| **A first-party reranker is now possible and was not in August** | Vertex AI has a Ranking API and LangChain has an integration for it. Checked, not remembered. Not switching yet: measure the current one first, then swap behind `backend/models.py` and compare. Moving a reranker between two vendors by editing one file is what the seam was built for |
+
+### Fine-tuning: form, not facts
+
+The prose problem — four prompt rewrites, each longer and worse — is a FORM problem, and
+form is what fine-tuning is reliably good at. Knowledge is what it is bad at, and here
+knowledge comes from the corpus anyway.
+
+| Decision | Why |
+|---|---|
+| **Split REASONING from COMMUNICATION** | A managed model reasons over the retrieved evidence; a fine-tuned model says it in the house voice. The writer never needs to know a single film exists, so nothing stale is ever baked into weights |
+| **The handoff between them is STRUCTURED, never prose** | Reasoner emits films, evidence and reasons as JSON; the writer turns that into the sentence. Prose-to-prose makes it impossible to tell which stage invented something; structure makes "the writer named no film the reasoner did not" a mechanical check. Also finally adopts the Pass 0 habit that was never taken up, and is why `backend/api.py` reads the answer with a regular expression today |
+| **This IS the multi-agent item** | Two agents with genuinely different jobs and genuinely different models, with a checkable contract between them — rather than two agents that could have been one |
+| **The training data is the work, not the training** | A few hundred examples of evidence bundle to ideal answer, generated by a strong model and hand-corrected. The correcting is what encodes the taste, and the taste is the point |
+| **Hallucination MOVES, it does not disappear** | A fine-tuned writer handed evidence can still add a flourish nothing supports. The critic and the grounding check stay |
+| **Where to fine-tune is a COST decision, not a capability one** | A SageMaker endpoint bills by the hour whether or not anyone queries it; Bedrock bills per token. To be checked against current documentation before planning, not decided from memory |
 
 ---
 
