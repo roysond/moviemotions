@@ -107,7 +107,8 @@ def render(markdown):
             language = line[3:].strip()
             body, i = [], i + 1
             while i < len(lines) and not lines[i].startswith("```"):
-                body.append(lines[i]); i += 1
+                body.append(lines[i])
+                i += 1
             i += 1
             css = f' class="lang-{slug(language)}"' if language else ""
             out.append(f"<pre><code{css}>"
@@ -115,21 +116,26 @@ def render(markdown):
             continue
 
         if re.fullmatch(r"\s*(-{3,}|\*{3,}|_{3,})\s*", line):    # horizontal rule
-            close_list(); out.append("<hr>"); i += 1; continue
+            close_list()
+            out.append("<hr>")
+            i += 1
+            continue
 
         heading = re.match(r"^(#{1,6})\s+(.*)$", line)
         if heading:
             close_list()
             level, text = len(heading.group(1)), inline(heading.group(2).strip())
             out.append(f'<h{level} id="{slug(text)}">{text}</h{level}>')
-            i += 1; continue
+            i += 1
+            continue
 
         if line.lstrip().startswith("|") and i + 1 < len(lines) \
                 and re.fullmatch(r"\s*\|[\s:|-]+\|\s*", lines[i + 1]):
             close_list()
             def cells(row):
                 return [c.strip() for c in row.strip().strip("|").split("|")]
-            header = cells(line); i += 2
+            header = cells(line)
+            i += 2
             out.append("<table><thead><tr>"
                        + "".join(f"<th>{inline(c)}</th>" for c in header)
                        + "</tr></thead><tbody>")
@@ -137,13 +143,15 @@ def render(markdown):
                 out.append("<tr>" + "".join(f"<td>{inline(c)}</td>"
                                             for c in cells(lines[i])) + "</tr>")
                 i += 1
-            out.append("</tbody></table>"); continue
+            out.append("</tbody></table>")
+            continue
 
         if line.startswith(">"):                                 # blockquote
             close_list()
             body = []
             while i < len(lines) and lines[i].startswith(">"):
-                body.append(lines[i][1:].lstrip()); i += 1
+                body.append(lines[i][1:].lstrip())
+                i += 1
             out.append("<blockquote>" + inline(" ".join(body)) + "</blockquote>")
             continue
 
@@ -151,18 +159,23 @@ def render(markdown):
         if item:
             wanted = "ol" if item.group(2)[0].isdigit() else "ul"
             if open_list != wanted:
-                close_list(); out.append(f"<{wanted}>"); open_list = wanted
+                close_list()
+                out.append(f"<{wanted}>")
+                open_list = wanted
             body = [item.group(3)]
             i += 1
             while i < len(lines) and lines[i].strip() \
                     and not re.match(r"^(\s*)([-*+]|\d+[.)])\s+", lines[i]) \
                     and not lines[i].startswith(("#", "|", "```", ">")):
-                body.append(lines[i].strip()); i += 1
+                body.append(lines[i].strip())
+                i += 1
             out.append(f"<li>{inline(' '.join(body))}</li>")
             continue
 
         if not line.strip():
-            close_list(); i += 1; continue
+            close_list()
+            i += 1
+            continue
 
         close_list()                                             # paragraph
         body = [line]
@@ -170,7 +183,8 @@ def render(markdown):
         while i < len(lines) and lines[i].strip() \
                 and not lines[i].startswith(("#", "|", "```", ">", "---")) \
                 and not re.match(r"^(\s*)([-*+]|\d+[.)])\s+", lines[i]):
-            body.append(lines[i]); i += 1
+            body.append(lines[i])
+            i += 1
         out.append("<p>" + inline(" ".join(body)) + "</p>")
 
     close_list()

@@ -70,7 +70,8 @@ def main():
 
     print(f"\nloaded {loaded} · no plot {empty} · unmatched {unmatched}")
     if unmatched:
-        print("Unmatched means plots.json holds a film movies does not. Check before rerunning.")
+        print("Unmatched means plots.json holds a film movies does not. "
+              "Check before rerunning.")
 
 
 if __name__ == "__main__":

@@ -69,10 +69,11 @@ def test_every_root_path_counts_its_own_depth_correctly():
             if not depth or not mentions_file(inner):
                 continue
             checked += 1
+            reached = ("the repository root" if depth == levels_below_root
+                       else "the wrong folder")
             assert depth == levels_below_root, (
                 f"{path.relative_to(ROOT)} wraps os.path.abspath(__file__) in {depth} "
-                f"dirname() call(s), which reaches "
-                f"{'the repository root' if depth == levels_below_root else 'the wrong folder'}"
+                f"dirname() call(s), which reaches {reached}"
                 f" — a file {levels_below_root} level(s) below the root needs exactly "
                 f"{levels_below_root}")
     assert checked, "found no path arithmetic at all — has this test stopped looking?"

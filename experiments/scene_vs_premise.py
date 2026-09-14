@@ -9,7 +9,8 @@ THE QUESTION
     One embed call per query; everything else is read from stored vectors.
 
 RUN
-    python -m experiments.scene_vs_premise "a prisoner digging a tunnel" --film "The Shawshank Redemption"
+    python -m experiments.scene_vs_premise "a prisoner digging a tunnel"
+        --film "The Shawshank Redemption"
     python -m experiments.scene_vs_premise "someone hunted through a jungle"
 """
 

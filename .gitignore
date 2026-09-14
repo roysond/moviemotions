@@ -54,7 +54,7 @@ docs/SESSION-NOTES.html
 docs/ROADMAP.html
 docs/GROUNDWORK.html
 data/plots.json
-data/sentence_vectors.json
+data/plot_sentence_vectors.json   # 14MB embedding cache, regenerable
 
 # front end: dependencies and build output are derived, never committed
 frontend/node_modules/

@@ -1,4 +1,4 @@
-"""HTTP interface over the agent — the same graph, driven by a browser instead of a terminal.
+"""HTTP interface over the agent — the same graph, driven by a browser not a terminal.
 
 WHAT THIS IS NOT
     It is not a second copy of the agent. There is no logic here: no prompts, no tools, no
@@ -38,10 +38,9 @@ from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
-import psycopg
-
-from backend.agent import AGENT_MODEL, MAX_PASSES, graph, split_content
-from backend.config import DATABASE_URL
+from backend.agent import (AGENT_MODEL, MAX_PASSES, RECURSION_LIMIT, graph,
+                           split_content)
+from backend.catalogue import all_titles, facts_for
 from backend.retrieval import search
 
 # This file lives in backend/, so the repository root — where static/ and data/ sit —
@@ -114,7 +113,8 @@ def trace_of(messages):
         else:
             calls = getattr(message, "tool_calls", None) or []
             for call in calls:
-                steps.append({"kind": "tool_call", "tool": call["name"], "args": call["args"]})
+                steps.append({"kind": "tool_call", "tool": call["name"],
+                              "args": call["args"]})
             visible, reasoning = split_content(message)
             if visible:
                 steps.append({"kind": "ai", "text": visible, "reasoning": reasoning})
@@ -127,7 +127,7 @@ def config_for(thread_id):
         # x4, not x3: the critic adds a node to every lap, and the limit counts NODE
         # EXECUTIONS rather than laps. Left at x3 a long conversation would hit the
         # backstop and look like a runaway loop when nothing is wrong.
-        "recursion_limit": MAX_PASSES * 4,
+        "recursion_limit": RECURSION_LIMIT,
         "run_name": "moviemotions-web",
         "metadata": {"agent_model": AGENT_MODEL, "surface": "web"},
     }
@@ -254,33 +254,13 @@ NEGATIONS = ("not ", "n't ", "other than", "besides", "except", "excluding",
 NEGATION_WINDOW = 40      # characters before the title to inspect
 
 
-FACTS = """
-SELECT title,
-       EXTRACT(YEAR FROM release_date)::int          AS year,
-       runtime_minutes,
-       tmdb_raw_payload ->> 'poster_path'            AS poster_path
-FROM movies
-WHERE title = ANY(%(titles)s)
-"""
-
-ALL_TITLES = "SELECT title FROM movies ORDER BY title"
-
-
-def catalogue_titles():
-    """Every title, for matching the agent's prose against what actually exists."""
-    with psycopg.connect(DATABASE_URL) as conn:
-        return [row[0] for row in conn.execute(ALL_TITLES).fetchall()]
-
-
-def film_facts(titles):
-    """Title -> the facts the panel draws. Read from movies, which is the only place
-    they live now that the knowledge graph is gone."""
-    if not titles:
-        return {}
-    with psycopg.connect(DATABASE_URL) as conn:
-        rows = conn.execute(FACTS, {"titles": list(titles)}).fetchall()
-    return {r[0]: {"title": r[0], "year": r[1], "runtime_minutes": r[2],
-                   "poster_path": r[3]} for r in rows}
+# NO SQL IN THIS FILE, AND NO CONNECTION.
+#
+# `catalogue_titles` and `film_facts` used to live here, each opening their own
+# connection — the web layer reaching past the domain and straight to the database.
+# The second of them was also a duplicate: tools.py had its own query for the same
+# facts. Both now come from backend/catalogue.py, which is the only place that knows
+# what a `movies` row looks like.
 
 
 def films_mentioned(answer, titles=None, exclude=()):
@@ -294,7 +274,7 @@ def films_mentioned(answer, titles=None, exclude=()):
     # `titles` is injected by the tests so this can be checked without a database.
     # A function that reaches out and fetches its own input cannot be tested cheaply.
     if titles is None:
-        titles = catalogue_titles()
+        titles = all_titles()
     titles = sorted(titles, key=len, reverse=True)
 
     lowered = answer.lower()
@@ -395,7 +375,7 @@ def panel(request: Panel):
     """
     rows = []
     titles = films_mentioned(request.answer, exclude=request.exclude)
-    facts = film_facts(titles)
+    facts = facts_for(titles)
 
     for title in titles:
         found = facts.get(title)

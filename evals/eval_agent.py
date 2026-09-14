@@ -6,7 +6,8 @@ WHY THIS EXISTS ALONGSIDE eval_variants.py
 
     But the agent adds three new ways to be wrong, and none of them are search:
         it can pick the WRONG TOOL
-        it can recommend a film the tool never returned  (the hallucination we designed against)
+        it can recommend a film the tool never returned  (the hallucination this
+        whole design exists to prevent)
         it can say things the retrieved text does not support
 
     A system is only measured where it is measured. Until now the loop was unmeasured.
@@ -30,7 +31,8 @@ THE JUDGE
 
     ragas 0.4.x hard-imports a module that langchain-community 0.4 removed. Pin it:
         pip install "ragas" "langchain-community<0.4"
-    That pin leaves langchain-core 1.x and langgraph 1.x untouched — the agent is unaffected.
+    That pin leaves langchain-core 1.x and langgraph 1.x untouched — the agent is
+    unaffected.
     If ragas is missing or broken this script still runs and reports the two exact metrics.
 
 USAGE
@@ -255,7 +257,8 @@ def main():
             "is_refusal": not case["expect"],
         })
         mark = "ok " if rows[-1]["tool_ok"] and not rows[-1]["ungrounded"] else "FAIL"
-        print(f"  {mark} [{case['id']}] {case['query'][:52]:52} -> {rows[-1]['tool_called']}")
+        print(f"  {mark} [{case['id']}] {case['query'][:52]:52} "
+              f"-> {rows[-1]['tool_called']}")
 
     # Freeze the exact text that was judged, contexts included, so --rejudge can
     # replay it. Written BEFORE judging so a judge crash cannot lose the transcript.
@@ -275,7 +278,8 @@ def report(rows):
     grounded = sum(not r["ungrounded"] for r in rows)
     complete = sum(not r["missing"] for r in rows)
     print(f"  tool accuracy   {tool_ok}/{len(rows)}   exact — right tool chosen")
-    print(f"  grounding       {grounded}/{len(rows)}   exact — named no film the tools did not return")
+    print(f"  grounding       {grounded}/{len(rows)}   exact — named no film the "
+          f"tools did not return")
     print(f"  expected films  {complete}/{len(rows)}   exact — named the film we wanted")
     # judged maps case_id -> LIST of draws. Average per case, then across cases.
     per_case = {cid: sum(d) / len(d) for cid, d in judged.items()}
@@ -305,7 +309,8 @@ def report(rows):
         if not row["tool_ok"]:
             problems.append(f"called {row['tool_called']}, expected {row['tool_expected']}")
         if row["ungrounded"]:
-            problems.append(f"UNGROUNDED: named {row['ungrounded']} — not returned by any tool")
+            problems.append(f"UNGROUNDED: named {row['ungrounded']} — "
+                            f"not returned by any tool")
         if row["missing"]:
             problems.append(f"did not name {row['missing']}")
         if row["id"] in per_case and per_case[row["id"]] < 0.8:

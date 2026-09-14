@@ -1,4 +1,4 @@
-"""The same two tools, exposed over MCP so a client that is not this repository can use them.
+"""The same two tools over MCP, so a client outside this repository can use them.
 
 WHY THIS FILE IS SHORT, AND WHY THAT IS THE POINT
     It defines no tool. `search_films` and `lookup_film` are plain Python functions in
