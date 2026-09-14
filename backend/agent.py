@@ -20,9 +20,31 @@ THE THREE PARTS OF ANY LANGGRAPH
     STATE   what travels round the loop. Here: the running list of messages.
             Every pass appends to it, so the model always sees the full history —
             including what its own tool calls returned.
-    NODES   the things that do work. `think` asks the model; `act` runs tools.
+    NODES   the things that do work. `think` decides; `act` runs tools;
+            `write` turns the decision into sentences.
     EDGES   the wiring. One edge is CONDITIONAL — that single branch is the
             entire difference between a pipeline and an agent.
+
+TWO MODELS, TWO JOBS — the reasoner and the writer
+    `think` is the REASONER and it is the agentic part: it picks a tool, reads what
+    came back, and decides whether it has enough. It writes no prose at all. It ends
+    by emitting a small JSON verdict — which films, and the phrases that justify them.
+
+    `write` is the WRITER. It receives that verdict and the person's question, and
+    NOTHING else: no premise, no scores, no tool output, no history. It chooses
+    nothing, calls no tool, runs once.
+
+        query ─▶ think ⇄ act ─(verdict as JSON)─▶ write ─▶ review ─▶ answer
+                   the loop                      one pass
+
+    Deciding which film fits and saying it well are different skills, and one model
+    asked for both in a single breath does neither: it copies the tool output back.
+    Splitting them also makes the grounding check MECHANICAL — `backend/handoff.py`
+    drops any film the tools never returned, before the writer ever sees it. A rule
+    in a prompt is a request; a record the writer cannot see past is a guarantee.
+
+    Today both slots hold the same model. That is not a mistake — the split is a
+    SEAM, and the seam is worth having before there is a second model to put in it.
 
 HOW IT STOPS — two mechanisms, and only one of them is the safety net
     Natural termination: the model replies with an ANSWER instead of a tool call,
@@ -34,7 +56,6 @@ HOW IT STOPS — two mechanisms, and only one of them is the safety net
         bug signal, not a working design.
 """
 
-import os
 import re
 import textwrap
 import uuid
@@ -46,18 +67,30 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 
-from backend.models import chat_model
+from backend import handoff
+from backend.models import chat_model, writer_model
 from backend.tools import TOOLS
 
 load_dotenv()
 
 # Re-exported so backend/api.py and the traces keep importing it from here. WHICH
 # model, and whose, is decided in backend/config.py; this file must not know.
-from backend.config import AGENT_MODEL      # noqa: E402,F401
+from backend.config import AGENT_MODEL, WRITER_MODEL   # noqa: E402,F401
 MAX_PASSES = 6          # backstop only; natural termination should fire long before
 
-SYSTEM_PROMPT = """You are MovieMotions. You recommend films from a catalogue you can
-only reach through tools.
+# THE LIMIT COUNTS NODE EXECUTIONS, NOT LAPS. A lap can run think, act, write, critic
+# and review, so the backstop is multiplied to match. Set too low, an ordinary
+# conversation trips it and looks like a runaway loop when nothing is wrong.
+#
+# Defined ONCE. It was computed here and again in api.py, so the two front ends
+# disagreed the moment either changed — and the browser is the one place nobody
+# thinks to check after editing the graph.
+RECURSION_LIMIT = MAX_PASSES * 5
+
+REASONER_PROMPT = """You are the reasoner behind MovieMotions. You DECIDE which films
+answer a person's question. Someone else writes the reply, so you write no prose at all.
+
+You can only reach the catalogue through tools.
 
 NEVER name a film unless a tool returned it in this conversation. You have no other
 catalogue and no reliable memory of what films exist.
@@ -88,21 +121,69 @@ READING THE RESULT
 - If the results look off-target you may search once more with different wording. Twice
   is enough.
 
-WRITING THE ANSWER — these are mechanical rules, follow them exactly
-- The first characters you write are a film's title. There is no opening sentence.
-- One film per line, best first, at most three. No blank lines between them. No bold, no
-  asterisks, no bullets, no numbering, no headings.
-- One or two sentences per film, and they must say WHY IT FITS WHAT THEY ASKED FOR.
-- Do not retell the plot. The premise is given to you so you know what is TRUE about a
-  film, not so you can copy it back.
-- After the last film, stop. No closing sentence, no summary, no offer to search again.
-- Never mention tools, scores, searches, floors or anything about how you found the film.
-- Finish every sentence. No placeholders, no trailing "because...", no ellipsis standing
-  in for content. If you cannot finish a sentence, delete it.
+WHEN YOU ARE DONE, REPLY WITH JSON AND NOTHING ELSE
+No sentence before it, none after it, no code fence. The reply IS the object:
+
+{"films": [{"title": "<copied exactly from a tool result>",
+            "year": <copied exactly from a tool result>,
+            "why": ["<short phrase>", "<short phrase>"]}],
+ "nothing_found": false}
+
+- Copy title and year from the tool output character for character. Never from memory.
+  A film the tools did not return is thrown away before anyone sees it.
+- "why" is a PHRASE, not a sentence: what about this film answers what they asked.
+  "creatures hunting people in a jungle", not "This film is a great match because it
+  features creatures". One or two phrases. No sentence, no preamble, no full stop.
+- Take each phrase from that film's own MATCHED line, FEELS line or PREMISE. Withheld
+  text may be ranked on and must never be described.
+- Nothing clearly above the floor: {"films": [], "nothing_found": true}. That is a
+  complete and correct answer, and a better one than a film that does not fit.
+- Best first. At most three.
+
+THE ONE TIME YOU DO NOT REPLY WITH JSON
+If a limit is vague and carries no number, call no tool and reply with the one short
+question you need answered, as plain text. Having called no tool, there is nothing to
+decide yet — so there is no verdict to hand over.
 """
+
+WRITER_PROMPT = """You write the final reply to someone asking for a film.
+
+You are given their question and a RECORD of what was decided. You decide nothing: not
+which films, not their order, not whether any of them fit. That is settled.
+
+THE RECORD IS EVERYTHING YOU KNOW ABOUT THESE FILMS. Not a summary of what you know —
+the whole of it. You have no other knowledge of them and no way to check. If a thing is
+not written in the record it did not happen, and writing it anyway is the one failure
+that matters here. No plot, no cast, no comparisons to other films, no atmosphere you
+imagined from the title.
+
+FORMAT — mechanical, follow exactly
+- The first characters you write are a film's title. There is no opening sentence.
+- One film per line, in the order given. No blank lines between them. No bold, no
+  asterisks, no bullets, no numbering, no headings.
+- After the title, one or two sentences saying WHY IT ANSWERS THEIR QUESTION — built
+  from that film's reasons and aimed at the words they actually used.
+- After the last film, stop. No closing sentence, no summary, no offer to search again.
+- Finish every sentence. No ellipsis, no trailing "because", no placeholder.
+- Never mention tools, scores, searches, records, or how the film was found.
+
+THEIR QUESTION
+{question}
+
+THE RECORD
+{record}
+"""
+
+# NOTHING FOUND IS WRITTEN BY CODE, NOT BY A MODEL.
+#
+# There is nothing to phrase. A refusal has no facts in it, so a model call here buys
+# no quality and costs the one thing a model can always do — add something.
+NOTHING_FOUND = ("I do not have anything in the catalogue that fits that. Try a "
+                 "different feeling, or name a film you liked and I will look around it.")
 
 llm = chat_model()
 llm_with_tools = llm.bind_tools(TOOLS)
+writer = writer_model()
 
 
 def split_content(message):
@@ -122,7 +203,8 @@ def split_content(message):
             visible.append(str(block))
         elif block.get("type") == "reasoning_content":
             inner = block.get("reasoning_content") or {}
-            reasoning.append(inner.get("text", "") if isinstance(inner, dict) else str(inner))
+            reasoning.append(inner.get("text", "") if isinstance(inner, dict)
+                             else str(inner))
         elif block.get("type") == "text":
             visible.append(block.get("text", ""))
     return "".join(visible).strip(), " ".join(reasoning).strip()
@@ -166,31 +248,14 @@ def think(state: MessagesState) -> dict:
         The fix is to refuse the empty reply at the door rather than to sanitise the
         history later. One place, one rule: nothing empty enters the state.
     """
-    reply = llm_with_tools.invoke([SystemMessage(SYSTEM_PROMPT)] + state["messages"])
+    reply = llm_with_tools.invoke([SystemMessage(REASONER_PROMPT)] + state["messages"])
     if empty_reply(reply):
         reply = AIMessage(content=NO_ANSWER, id=reply.id)
         return {"messages": [reply]}
 
-    # FORMATTING IS DETERMINISTIC, SO CODE OWNS IT.
-    #
-    # This lived in the critic until it was found to have never run once: the critic is
-    # switched off. A guarantee placed on an optional path is not a guarantee. It runs
-    # here instead, on every answer, whatever else is enabled.
-    #
-    # Only when the model has stopped asking for tools — a reply carrying tool_calls is
-    # a request, not an answer, and has no prose to tidy.
-    if not getattr(reply, "tool_calls", None):
-        visible = split_content(reply)[0]
-        lines = [ln for ln in visible.splitlines() if ln.strip()]
-        evidence = "\n\n".join(str(m.content) for m in state["messages"]
-                                if m.__class__.__name__ == "ToolMessage")
-        if lines and evidence.strip():
-            cleaned = strip_scaffolding(lines, evidence)
-            if cleaned != lines:
-                print(f"  [tidied {len(lines) - len(cleaned)} scaffolding line(s); "
-                      f"list markers removed]")
-                reply = AIMessage(content="\n".join(cleaned), id=reply.id)
-
+    # The scaffolding stripper used to run here, on this node's prose. This node no
+    # longer writes prose — it writes a verdict — so the stripper moved to `write`,
+    # which is where prose is now made.
     return {"messages": [reply]}
 
 
@@ -220,8 +285,29 @@ If every line is supported, reply with exactly: NONE
 Reply with nothing else — no explanation, no punctuation beyond the commas."""
 
 
-TITLE_IN_EVIDENCE = re.compile(r"^\s*\d+\.\s+(.+?)\s+\(\d{4}\)", re.M)
 LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*\u2022])\s+")
+
+
+def tool_evidence(messages):
+    """Everything the tools returned this turn.
+
+    This is the only thing any answer is allowed to be true about, so it is worth
+    having ONE definition of it rather than one per reader.
+    """
+    return "\n\n".join(str(m.content) for m in messages
+                        if m.__class__.__name__ == "ToolMessage")
+
+
+def first_question(messages):
+    """What the person originally asked, in their own words.
+
+    The FIRST human message, not the last: a `revise` note from the review panel is
+    also a HumanMessage, and steering a draft is not the question being answered.
+    """
+    for message in messages:
+        if message.__class__.__name__ == "HumanMessage":
+            return str(message.content)
+    return ""
 
 
 def strip_scaffolding(lines, evidence):
@@ -243,7 +329,7 @@ def strip_scaffolding(lines, evidence):
         A refusal names no film at all and is a correct, complete answer. If stripping
         would empty the reply, nothing is stripped.
     """
-    titles = set(TITLE_IN_EVIDENCE.findall(evidence))
+    titles = set(handoff.films_in_evidence(evidence).values())
     if not titles:
         return lines
 
@@ -270,6 +356,88 @@ def strip_scaffolding(lines, evidence):
     return [LIST_MARKER.sub("", line) for line in trimmed]
 
 
+def plain_answer(verdict):
+    """The record as sentences, written by CODE. Flat, and true.
+
+    The writer is the only part of this application that can go missing without the
+    answer becoming WRONG — by the time it runs, every decision has been made and
+    checked. So a writer outage costs style, not availability, and this is what that
+    costs: the right films, the right reasons, no craft.
+    """
+    return "\n".join(f"{film['title']} ({film['year']}) — {'; '.join(film['why'])}."
+                      for film in verdict["films"])
+
+
+def write(state: MessagesState) -> dict:
+    """NODE — turn the reasoner's verdict into the reply. Decides nothing.
+
+    THE HANDOFF IS A RECORD, NOT A PARAGRAPH
+        The reasoner ends its work with a small JSON object naming films and the
+        phrases that justify them. This node validates that object against what the
+        tools actually returned, then hands the WRITER only the surviving record and
+        the person's question — no premise, no scores, no history, no tool output.
+
+        That is the whole point. The writer cannot smuggle in a fact it was never
+        given, because it was never given any. Two models passing prose to each other
+        is how an invented detail gets in: the second reads a sentence, likes the
+        shape of it, and finishes the thought. Structure closes that gap in a way no
+        instruction can, because an instruction is a request.
+
+    THREE WAYS OUT, AND ONLY ONE OF THEM CALLS A MODEL
+        no evidence   nobody searched — a greeting, or the reasoner asking for the
+                      number it was told to ask for. Its own words stand.
+        no films      a refusal, written by code. There is nothing to phrase.
+        films         the writer runs.
+    """
+    message = state["messages"][-1]
+    draft = split_content(message)[0]
+    evidence = tool_evidence(state["messages"])
+
+    if not evidence.strip():
+        return {}                       # nothing retrieved; nothing to hand over
+
+    payload = handoff.extract(draft)
+    if payload is None:
+        # DEGRADE, DO NOT FAIL. A malformed verdict is the reasoner's mistake and the
+        # person waiting did not make it. Its own words are a worse answer than the
+        # writer would have produced, and an answer.
+        print("  [no verdict in the reasoner's reply — passing its own words through]")
+        return {}
+
+    verdict, problems = handoff.validate(payload, evidence)
+    for problem in problems:
+        print(f"  [verdict] {problem}")
+
+    if verdict["nothing_found"]:
+        return {"messages": [AIMessage(content=NOTHING_FOUND, id=message.id)]}
+
+    print(f"  [verdict] {handoff.summarise(verdict)}")
+    try:
+        reply = writer.invoke([HumanMessage(WRITER_PROMPT.format(
+            question=first_question(state["messages"]),
+            record=handoff.for_writer(verdict)))])
+        prose = split_content(reply)[0].strip()
+    except Exception as error:
+        print(f"  [writer unavailable: {type(error).__name__}]")
+        prose = ""
+
+    if not prose:
+        prose = plain_answer(verdict)
+
+    # The stripper still runs. It lived on the reasoner's prose until the reasoner
+    # stopped writing prose; the habit it catches — an opening line, a list marker
+    # copied from whatever the model was shown — belongs to whoever is writing.
+    lines = [line for line in prose.splitlines() if line.strip()]
+    cleaned = strip_scaffolding(lines, evidence) if lines else lines
+    if cleaned != lines:
+        print(f"  [tidied {len(lines) - len(cleaned)} scaffolding line(s); "
+              f"list markers removed]")
+    if not cleaned:
+        cleaned = plain_answer(verdict).splitlines()
+
+    return {"messages": [AIMessage(content="\n".join(cleaned), id=message.id)]}
+
+
 def critic(state: MessagesState) -> Command:
     """NODE — strike any line the retrieved text does not support.
 
@@ -294,12 +462,7 @@ def critic(state: MessagesState) -> Command:
     if not lines:
         return Command(goto="review")
 
-    # Everything the tools actually returned in this conversation. This is the only
-    # thing the draft is allowed to be true about.
-    evidence = "\n\n".join(
-        str(m.content) for m in state["messages"]
-        if m.__class__.__name__ == "ToolMessage"
-    )
+    evidence = tool_evidence(state["messages"])
     if not evidence.strip():
         return Command(goto="review")     # nothing was retrieved; nothing to check against
 
@@ -358,12 +521,17 @@ CRITIC_ENABLED = False
 def should_continue(state: MessagesState) -> str:
     """THE CONDITIONAL EDGE — the one branch that makes this an agent.
 
-    A reply carrying tool_calls is the model ASKING for something; loop round and
-    run it. A reply without tool_calls is the model ANSWERING — and the answer now
-    goes past a human before it goes out.
+    A reply carrying tool_calls is the reasoner ASKING for something; loop round and
+    run it. A reply without tool_calls is the reasoner having DECIDED — and a decision
+    is not yet an answer, so it goes to the writer next.
     """
     if getattr(state["messages"][-1], "tool_calls", None):
         return "act"
+    return "write"
+
+
+def after_write(state: MessagesState) -> str:
+    """Where a finished reply goes. The critic if it is switched on, the human if not."""
     return "critic" if CRITIC_ENABLED else "review"
 
 
@@ -411,15 +579,18 @@ def review(state: MessagesState) -> Command:
 
 builder = StateGraph(MessagesState)
 builder.add_node("think", think)
-builder.add_node("act", ToolNode(TOOLS))     # runs whatever the model asked for
+builder.add_node("act", ToolNode(TOOLS))     # runs whatever the reasoner asked for
+builder.add_node("write", write)
 builder.add_node("critic", critic, destinations=("review",))
 builder.add_node("review", review, destinations=("think", END))
 builder.add_edge(START, "think")
-# Every value should_continue can return must appear here. It can return "review"
-# whenever CRITIC_ENABLED is False, and LangGraph rejects a destination that is
-# not declared — so switching the critic off broke the graph until this line grew.
+# Every value a router can return must appear in its own map. LangGraph rejects a
+# destination that was never declared — which is how switching the critic off once
+# broke the graph.
 builder.add_conditional_edges("think", should_continue,
-                              {"act": "act", "critic": "critic", "review": "review"})
+                              {"act": "act", "write": "write"})
+builder.add_conditional_edges("write", after_write,
+                              {"critic": "critic", "review": "review"})
 builder.add_edge("act", "think")             # <-- the backward edge IS the loop
 # A checkpointer is what makes a pause resumable. InMemorySaver keeps it in this
 # process; swapping in a Postgres saver is the only change needed to survive a restart.
@@ -490,11 +661,7 @@ def converse(question: str, show_trace: bool = True, decide=ask_human) -> list:
         # thread_id names the conversation the checkpointer saves under. Resuming an
         # interrupt means "reload THIS thread", so it must be the same on both calls.
         "configurable": {"thread_id": str(uuid.uuid4())},
-        # the review node costs a step per pass, so the backstop allows for it
-        # x4, not x3: the critic adds a node to every lap, and the limit counts NODE
-        # EXECUTIONS rather than laps. Left at x3 a long conversation would hit the
-        # backstop and look like a runaway loop when nothing is wrong.
-        "recursion_limit": MAX_PASSES * 4,
+        "recursion_limit": RECURSION_LIMIT,
         # names the trace in LangSmith; metadata makes runs filterable by model
         "run_name": "moviemotions-agent",
         "metadata": {"agent_model": AGENT_MODEL},

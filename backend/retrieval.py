@@ -34,6 +34,7 @@ import bisect
 
 import psycopg
 
+from backend.catalogue import DISPLAYABLE, resolve_node, resolve_title
 from backend.config import DATABASE_URL
 from backend.models import embed, rerank
 from backend.tracing import traceable
@@ -63,7 +64,8 @@ CONSTRAINT_KIND = {
 #               twist. Absent from this set on purpose.
 #   plot_scene  MATCHING ONLY — a scene from anywhere in the film, including the end.
 #               It is the sharpest thing to search and the least safe to print.
-DISPLAYABLE = {"premise", "mood_feel"}
+# The set itself lives in backend/catalogue.py, one layer down, and is imported above.
+# Two files each deciding what is safe to print is how a spoiler ships.
 
 # Constraints that may be inherited from a "similar to X" film.
 #
@@ -112,9 +114,12 @@ FROM movies m
 -- The ::int casts are not decoration. A bare NULL parameter has no type Postgres
 -- can infer from `$1 IS NULL`, so it refuses the query rather than guessing. The cast
 -- is how you say "this is an integer that happens to be absent".
-WHERE (%(max_runtime)s::int IS NULL OR m.runtime_minutes <= %(max_runtime)s::int)
-  AND (%(min_year)s::int   IS NULL OR m.release_date >= make_date(%(min_year)s::int, 1, 1))
-  AND (%(max_year)s::int   IS NULL OR m.release_date <= make_date(%(max_year)s::int, 12, 31))
+WHERE (%(max_runtime)s::int IS NULL
+       OR m.runtime_minutes <= %(max_runtime)s::int)
+  AND (%(min_year)s::int IS NULL
+       OR m.release_date >= make_date(%(min_year)s::int, 1, 1))
+  AND (%(max_year)s::int IS NULL
+       OR m.release_date <= make_date(%(max_year)s::int, 12, 31))
 """
 
 # The three graph gates, stamped out of one template so the shape cannot drift between
@@ -164,34 +169,6 @@ DISPLAY_TEXT = """
 SELECT movie_id, data_kind, content
 FROM movie_data
 WHERE movie_id = ANY(%(ids)s) AND data_kind = ANY(%(kinds)s) AND seq = 0
-"""
-
-BY_NAME = """
-SELECT node_key, name
-FROM graph_nodes
-WHERE node_type = %(type)s AND lower(name) = lower(%(name)s)
-"""
-
-LIKE_NAME = """
-SELECT node_key, name
-FROM graph_nodes
-WHERE node_type = %(type)s AND name ILIKE %(pattern)s
-ORDER BY name
-"""
-
-BY_TITLE = """
-SELECT movie_id, title,
-       tmdb_raw_payload -> 'belongs_to_collection' ->> 'name' AS series
-FROM movies
-WHERE lower(title) = lower(%(title)s)
-"""
-
-LIKE_TITLE = """
-SELECT movie_id, title,
-       tmdb_raw_payload -> 'belongs_to_collection' ->> 'name' AS series
-FROM movies
-WHERE title ILIKE %(pattern)s
-ORDER BY title
 """
 
 
@@ -245,47 +222,6 @@ def best_per_film(rows):
         if movie_id not in best or (rank, score) > (best[movie_id][0], best[movie_id][3]):
             best[movie_id] = candidate
     return best
-
-
-def resolve_title(conn, title):
-    """A written title -> one film. Returns (row, note). Exactly one of them is None.
-
-    Nought matches and several matches are both NORMAL outcomes of a person typing a
-    film's name from memory, not errors. Neither is answered by guessing: the note comes
-    back so the caller can ask one short question instead.
-    """
-    row = conn.execute(BY_TITLE, {"title": title}).fetchone()
-    if row:
-        return row, None
-
-    near = conn.execute(LIKE_TITLE, {"pattern": f"%{title}%"}).fetchall()
-    if len(near) == 1:
-        return near[0], None
-    if not near:
-        return None, f"No film called {title!r} is in the catalogue."
-    names = ", ".join(r[1] for r in near[:6])
-    return None, f"{title!r} matches several films here: {names}. Which one?"
-
-
-def resolve_node(conn, node_type, name):
-    """A written name -> node keys. Returns (keys, note); exactly one is None.
-
-    Exact first, then a contains-match, because people type "Nolan" and the graph holds
-    "Christopher Nolan". SEVERAL matches are kept, not narrowed — two actors sharing a
-    surname is a real thing, and returning both films is a better answer than silently
-    picking one. NO match is reported and stops the search: a filter that matches nothing
-    would otherwise delete the entire catalogue and report an empty result as though the
-    question had been understood.
-    """
-    rows = conn.execute(BY_NAME, {"type": node_type, "name": name}).fetchall()
-    if not rows:
-        rows = conn.execute(LIKE_NAME, {"type": node_type,
-                                        "pattern": f"%{name}%"}).fetchall()
-    if not rows:
-        return None, (f"No {node_type} called {name!r} appears in this catalogue, so "
-                      f"nothing was searched. This is a fact, not a weak match — the "
-                      f"name is simply not here.")
-    return [key for key, _ in rows], None
 
 
 def attach_display_text(conn, films):
@@ -356,9 +292,9 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
             notes.append("Nothing survived the filters, so nothing was ranked.")
             return [], notes
 
-        # label -> (data_kind, query vector). Keyed by LABEL, not by constraint, so
-        # that "like Alien" and "funny" can both be live at once: they are both
-        # mood_feel comparisons, so they share a scale and min() over them is honest.
+        # label -> (data_kinds, query vector, query text). Keyed by LABEL and not by
+        # constraint, so that "like Alien" and "funny" can both be live at once: they
+        # are both mood_feel comparisons, sharing a scale, so min() over them is honest.
         wanted = {}
 
         if similar_to:
@@ -367,6 +303,8 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
                 return [], notes + [problem]
 
             seed_id, seed_title, seed_series = found
+            seed_row = conn.execute(SEED_TEXT, {"movie_id": seed_id}).fetchone()
+            seed_text = seed_row[0] if seed_row else seed_title
             seed_kinds = [kind for c in SEEDABLE for kind in CONSTRAINT_KIND[c]]
             seeded = dict(conn.execute(SEED_VECTORS, {
                 "movie_id": seed_id, "variant": EMBED_VARIANT,
@@ -378,7 +316,8 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
             for constraint in SEEDABLE:
                 for kind in CONSTRAINT_KIND[constraint]:
                     if kind in seeded:
-                        wanted[f"like {seed_title}"] = ((kind,), seeded[kind])
+                        wanted[f"like {seed_title}"] = ((kind,), seeded[kind],
+                                                       seed_text)
 
             # Itself, obviously. And its sequels: they are the most similar films in
             # existence and the least useful answer, because the person has seen them.
@@ -405,7 +344,8 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
                                  ("situation", situation)):
             if text:
                 wanted[constraint] = (CONSTRAINT_KIND[constraint],
-                                      as_literal(embed(text)))    # kinds is a tuple
+                                      as_literal(embed(text)),    # kinds is a tuple
+                                      text)
 
         if not wanted:
             # A FACT QUERY IS A SET, AND A SET IS A COMPLETE ANSWER.
@@ -435,7 +375,7 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
 
         allowed = list(films)
         scored = {}
-        for label, (kinds, query_vector) in wanted.items():
+        for label, (kinds, query_vector, _query_text) in wanted.items():
             rows = conn.execute(SCORES, {"query": query_vector, "kinds": list(kinds),
                                          "variant": EMBED_VARIANT,
                                          "allowed": allowed}).fetchall()
@@ -477,12 +417,13 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
                 label for label, hit in per.items()
                 if hit[2] not in DISPLAYABLE
             ]
-            # The text the reranker reads. It is the film's STRONGEST matched row,
-            # displayable or not: a third-act scene may not be printed to a person, and
-            # is exactly what a cross-encoder should be judging. This never leaves the
-            # server — it is stripped before the tool renders anything.
-            strongest = max(per.values(), key=lambda hit: hit[0])
-            film["_rerank_text"] = strongest[1]
+            # The text the reranker reads, ONE ROW PER CONSTRAINT — the row that
+            # constraint actually matched, displayable or not: a third-act scene may not
+            # be printed to a person, and is exactly what a cross-encoder should judge.
+            # Each constraint is reranked against its own evidence, so "funny" is never
+            # scored against the text that answered "like Alien". Internal only — this
+            # is stripped before the tool renders anything.
+            film["_rerank_texts"] = {label: hit[1] for label, hit in per.items()}
             results.append(film)
 
         if unscorable:
@@ -504,8 +445,11 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
             # reported rather than acted on — whether 0.02 is worth answering is a
             # judgement, and judgements belong to the caller.
             top = results[0]
+            # The first constraint's raw cosine, named rather than indexed inline —
+            # the expression that did this in one line was unreadable and 100 columns.
+            first_raw = next(iter(top["per_constraint"].values()))["raw"]
             notes.append(
-                f"Best film: raw {top['per_constraint'][list(top['per_constraint'])[0]]['raw']:.3f}, "
+                f"Best film: raw {first_raw:.3f}, "
                 f"{top['over_floor']:+.3f} above the bottom of its own band. A margin "
                 f"near zero means nothing stood out, however high the rank looks.")
 
@@ -518,30 +462,43 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
         # than measuring distance, so its scores ARE comparable between a premise and a
         # plot scene. Vector rank chooses which text represents each film; the reranker
         # chooses the order.
-        # THE RERANK QUERY MUST CARRY EVERY CONSTRAINT, NOT JUST THE TYPED ONES.
         #
-        # It was built from the typed text alone, so "similar to Alien, but funny" asked
-        # the reranker only for "funny" — and it returned Crazy, Stupid, Love. at #1, a
-        # film scoring the WORST possible rank on the Alien half. The vector stage had
-        # honoured both constraints and put it 18th; the reranker, seeing half the
-        # request, overruled it. A final ranker given a partial query does not refine
-        # the earlier work, it discards it.
-        parts = [t for t in (mood, situation, theme) if t]
-        if similar_to:
-            seed_row = conn.execute(SEED_TEXT, {"movie_id": seed_id}).fetchone()
-            if seed_row:
-                parts.insert(0, seed_row[0])
-        query_text = " ".join(parts)
-
+        # EVERY CONSTRAINT REACHES THE RERANKER, AND EACH ONE IS SCORED ON ITS OWN.
+        #
+        # First mistake: the query was built from the TYPED text alone, so "similar to
+        # Alien, but funny" asked the reranker only for "funny" — and it returned
+        # Crazy, Stupid, Love. at #1, a film scoring the worst possible rank on the
+        # Alien half. A final ranker given a partial query does not refine the earlier
+        # work, it discards it.
+        #
+        # Second mistake: joining the constraints into ONE string let the LONGEST one
+        # decide. "Like Alien, but funny" became a thirty-word description of Alien
+        # followed by a single word,
+        # and the cross-encoder read it as a request for Alien: Get Out came first at
+        # 0.376, funny in no sense at all. Length is not importance, but to a model
+        # reading one string it is indistinguishable from it.
+        #
+        # So each constraint is scored on its own, against the row IT matched, and a
+        # film is worth its WEAKEST constraint. That is the same min() rule the vector
+        # stage uses, and it is safer here: a rerank score is relevance judged
+        # directly, so two of them share one scale by construction. No normalisation.
         pool = results[:RERANK_CANDIDATES]
-        if query_text and len(pool) > 1:
+        if wanted and len(pool) > 1:
             try:
-                ordered = rerank(query_text,
-                                 [f["_rerank_text"] for f in pool],
-                                 top_n=len(pool))
-                by_index = {r["index"]: r["score"] for r in ordered}
+                per_label = {}
+                for label, (_kinds, _vector, query_text) in wanted.items():
+                    ordered = rerank(query_text,
+                                     [f["_rerank_texts"][label] for f in pool],
+                                     top_n=len(pool))
+                    by_index = {r["index"]: r["score"] for r in ordered}
+                    per_label[label] = [by_index.get(i, 0.0)
+                                        for i in range(len(pool))]
+
                 for position, film in enumerate(pool):
-                    film["rerank"] = round(by_index.get(position, 0.0), 4)
+                    each = {label: round(scores[position], 4)
+                            for label, scores in per_label.items()}
+                    film["rerank_per_constraint"] = each
+                    film["rerank"] = min(each.values())
                     film["vector_place"] = position + 1
                 pool.sort(key=lambda f: f["rerank"], reverse=True)
 
@@ -551,7 +508,9 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
                 runner_up = pool[1]["rerank"] if len(pool) > 1 else 0.0
                 notes.append(
                     f"Reranked {len(pool)} films by reading the query and each film's "
-                    f"text together; {moved} changed position.")
+                    f"text together — once for each of the {len(wanted)} thing(s) "
+                    f"asked for, and each film scored by its WEAKEST one; "
+                    f"{moved} changed position.")
                 notes.append(
                     f"Relevance of the best film {top:.3f}, next best {runner_up:.3f}. "
                     f"UNLIKE the vector scores, this number means something on its own: "
@@ -569,7 +528,7 @@ def search(mood=None, theme=None, situation=None, similar_to=None,
 
         results = results[:limit]
         for film in results:
-            film.pop("_rerank_text", None)      # internal only; never leaves the server
+            film.pop("_rerank_texts", None)     # internal only; never leaves the server
 
         attach_display_text(conn, results)
 
@@ -583,8 +542,15 @@ def _print(title, results, notes):
     if not results:
         print("  (nothing)")
     for film in results:
-        print(f"\n  {film['score']:.3f}  {film['title']} ({film['year']}) "
-              f"· {film['runtime_minutes']}m  {film['per_constraint']}")
+        # Print the number the ORDER was decided by. Showing the vector score above a
+        # list the reranker reordered is a chart with the wrong axis label.
+        lead = (f"rel {film['rerank']:.3f}" if "rerank" in film
+                else f"vec {film.get('score', 0):.3f}")
+        print(f"\n  {lead}  {film['title']} ({film['year']}) "
+              f"· {film['runtime_minutes']}m")
+        if "rerank_per_constraint" in film:
+            print(f"         per constraint {film['rerank_per_constraint']} "
+                  f"(worst one decides)")
         print(f"         {film['show'].get('premise', '')[:150]}")
 
 

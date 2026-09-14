@@ -28,7 +28,8 @@ PLOT_HEADINGS = {"plot", "plot summary", "synopsis", "plot synopsis"}
 # Introduce ourselves the way a real client does: a descriptive User-Agent plus the
 # Accept headers a browser sends. Wikimedia's anti-scraper filter refuses bare requests.
 HEADERS = {
-    "User-Agent": "MovieMotions/0.1 (movie mood-recommendation learning project) python-httpx",
+    "User-Agent": ("MovieMotions/0.1 (movie mood-recommendation learning project) "
+                   "python-httpx"),
     "Api-User-Agent": "MovieMotions/0.1 (movie mood-recommendation learning project)",
     "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
@@ -112,7 +113,8 @@ def plot_for(title):
     secs = _get(WIKIPEDIA, {
         "action": "parse", "page": title, "prop": "sections", "format": "json",
     })["parse"]["sections"]
-    idx = next((s["index"] for s in secs if s["line"].strip().lower() in PLOT_HEADINGS), None)
+    idx = next((s["index"] for s in secs
+                if s["line"].strip().lower() in PLOT_HEADINGS), None)
     if idx is None:
         idx = next((s["index"] for s in secs if "plot" in s["line"].lower()), None)
     if idx is None:
@@ -141,9 +143,11 @@ def main():
                 "plot_chars": len(plot) if plot else 0,
             })
             flag = "OK  " if plot else "MISS"
-            print(f"{flag} {title:34.34} -> {wiki_title}  ({len(plot) if plot else 0} chars)")
+            size = len(plot) if plot else 0
+            print(f"{flag} {title:34.34} -> {wiki_title}  ({size} chars)")
         except httpx.HTTPStatusError as error:
-            body = " ".join(error.response.text.split())[:200]   # what the server actually said
+            # what the server actually said, collapsed onto one line
+            body = " ".join(error.response.text.split())[:200]
             out.append({
                 "tmdb_id": tmdb_id, "imdb_id": imdb_id, "title": title,
                 "wiki_title": None, "plot": None, "plot_chars": 0,
@@ -165,7 +169,8 @@ def main():
     got = sum(1 for o in out if o["plot"])
     chars = sorted(o["plot_chars"] for o in out)
     median = chars[len(chars) // 2] if chars else 0
-    print(f"\nsaved data/plots.json — {got}/{len(out)} films have a plot; median ~{median} chars")
+    print(f"\nsaved data/plots.json — {got}/{len(out)} films have a plot; "
+          f"median ~{median} chars")
 
 
 if __name__ == "__main__":

@@ -106,7 +106,8 @@ def check_requirements():
 
 
 # ── 3 · .env.example matches what the code actually reads ──────────────────
-ENV_READ = re.compile(r"""os\.(?:environ\[|environ\.get\(|getenv\()\s*["']([A-Z][A-Z0-9_]*)["']""")
+ENV_READ = re.compile(
+    r"""os\.(?:environ\[|environ\.get\(|getenv\()\s*["']([A-Z][A-Z0-9_]*)["']""")
 # Read by a library from the environment, never by our code. Declaring them is correct.
 IMPLICIT = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "LANGSMITH_API_KEY"}
 
@@ -126,8 +127,8 @@ def check_env_example():
     # The template's job is to tell a newcomer every name the code reads. A commented
     # line does that. Requiring it to be live would force the exact blank values that
     # break the app.
-    declared = set(re.findall(r"^#?([A-Z][A-Z0-9_]*)=", open(".env.example", encoding="utf-8").read(),
-                              re.MULTILINE))
+    template = open(".env.example", encoding="utf-8").read()
+    declared = set(re.findall(r"^#?([A-Z][A-Z0-9_]*)=", template, re.MULTILINE))
     read = {}
     for path in py_files():
         for name in ENV_READ.findall(open(path, encoding="utf-8").read()):
@@ -330,7 +331,8 @@ def check_local_imports():
                     continue
                 folder = os.path.join(*module.split("."))
                 if not os.path.isdir(folder):
-                    continue              # importing names out of a module file: runtime's job
+                    # importing names out of a module file: that is runtime's job
+                    continue
                 for alias in node.names:
                     if alias.name == "*":
                         continue
@@ -357,7 +359,8 @@ CHECKS = [
 
 if __name__ == "__main__":
     print("=" * 74)
-    print("REPO CHECK — structure only. Behaviour is checked by the evals, on your machine.")
+    print("REPO CHECK — structure only. Behaviour is checked by the evals, "
+          "on your machine.")
     print("=" * 74)
     for name, run in CHECKS:
         before = len(failures)

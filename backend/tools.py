@@ -28,11 +28,10 @@ RUN
     python -m backend.tools        the spec the model receives, then real calls
 """
 
-import psycopg
 from langchain_core.tools import tool
 
-from backend.config import DATABASE_URL
-from backend.retrieval import DISPLAYABLE, resolve_title, search
+from backend.catalogue import one_film
+from backend.retrieval import search
 
 # How to say a data_kind out loud, for the one line the model reads.
 KIND_NAME = {"mood_feel": "feel", "premise": "premise", "theme": "theme",
@@ -205,38 +204,25 @@ def lookup_film(title: str) -> str:
     Do NOT use this to find films LIKE the one named. That is search_films with
     similar_to.
     """
-    return _one_film(title)
+    return _render_one(title)
 
 
-ONE = """
-SELECT m.title, EXTRACT(YEAR FROM m.release_date)::int, m.runtime_minutes,
-       d.data_kind, d.content
-FROM movies m
-LEFT JOIN movie_data d ON d.movie_id = m.movie_id AND d.seq = 0
-WHERE lower(m.title) = lower(%(title)s)
-"""
+def _render_one(title):
+    """One film, as the text a model reads. RENDERING ONLY — no SQL lives here.
 
+    Fetching is `catalogue.one_film`, one layer down; this file turns what comes back
+    into lines. The split matters because the two change for different reasons: the
+    query changes when the schema does, this changes when we decide what a model
+    should see.
 
-def _one_film(title):
-    """The film's own facts and its spoiler-free text. Never its theme — see retrieval.
-
-    DISPLAYABLE is imported rather than re-listed. Two files that each decide for
-    themselves what may be shown will eventually disagree, and the one that gets it
-    wrong prints a spoiler.
+    Which kinds are safe to print is decided by the catalogue, not re-listed here.
     """
-    with psycopg.connect(DATABASE_URL) as conn:
-        found, problem = resolve_title(conn, title)
-        if problem:
-            return problem
-        rows = conn.execute(ONE, {"title": found[1]}).fetchall()
+    film, problem = one_film(title)
+    if problem:
+        return problem
 
-    if not rows:
-        return f"{title!r} is not in the catalogue."
-
-    name, year, runtime, _, _ = rows[0]
-    text = {kind: content for _, _, _, kind, content in rows
-            if kind in DISPLAYABLE}
-    lines = [f"{name} ({year}) · {runtime} min"]
+    text = film["text"]
+    lines = [f"{film['title']} ({film['year']}) · {film['runtime_minutes']} min"]
     if "premise" in text:
         lines.append(f"   PREMISE {text['premise']}")
     if "mood_feel" in text:

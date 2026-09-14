@@ -24,9 +24,9 @@ WHICH MODEL
     Nothing in this file names a vendor.
 
 RUN
-    python -m pipeline.derive_corpus                        all films -> data/derived.json
-    python -m pipeline.derive_corpus --limit 5              first 5   -> data/derived.sample.json
-    python -m pipeline.derive_corpus --titles "Alien" ...   named     -> data/derived.sample.json
+    python -m pipeline.derive_corpus                       -> data/derived.json
+    python -m pipeline.derive_corpus --limit 5             -> data/derived.sample.json
+    python -m pipeline.derive_corpus --titles "Alien" ...  -> data/derived.sample.json
 
 A PARTIAL RUN NEVER WRITES data/derived.json. Half a corpus in the real file looks
 exactly like a whole one, and the loader downstream cannot tell the difference. Samples

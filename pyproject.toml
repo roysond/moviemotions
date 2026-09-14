@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Tool configuration. One file, the standard place, instead of a pytest.ini plus a
+# setup.cfg plus a path hack in a test fixture.
+#
+# THERE IS NO [project] TABLE, ON PURPOSE
+#     A [project] table declares something INSTALLABLE — a library other code
+#     imports, published somewhere, versioned for consumers. MovieMotions is an
+#     APPLICATION: it is run, not imported. Declaring it as a package would add a
+#     build backend, a version number nobody reads and a wheel nobody builds, and
+#     would say something untrue about how it is meant to be used.
+#
+#     The Python version is pinned where it is actually enforced — the Dockerfile
+#     (python:3.13-slim) and .github/workflows/ci.yml — rather than asserted here
+#     as well. One statement of a fact, in the place that acts on it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+# `pythonpath` is why tests/conftest.py no longer edits sys.path by hand. A test
+# fixture reaching into the interpreter's import machinery is a workaround for
+# missing configuration, and it only worked for pytest — `python -m pytest` from a
+# different directory did not.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 92
+target-version = "py313"
+
+[tool.ruff.lint]
+# E501 line length, F401 unused import, F841 unused variable — the three that
+# actually catch things in a codebase with no type annotations. Deliberately not the
+# full rule set: a linter that fires on every line teaches you to ignore it.
+select = ["E", "F", "W"]

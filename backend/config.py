@@ -22,15 +22,19 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 REGION = os.environ["AWS_REGION"]
 
-# ─── Two model roles, two switches ────────────────────────────────────────────
-# There are TWO generation jobs in this application and they want different models.
-# One switch cannot serve both: flipping it to reach a better writer would also move
+# ─── Three model roles, three switches ────────────────────────────────────────
+# There are THREE generation jobs in this application and they want different models.
+# One switch cannot serve them: flipping it to reach a better writer would also move
 # the agent, which was measured on 2 Sep at 57s and 48K tokens against Nova's 2s and
-# 10K for the same question. Two roles, two settings, and neither can silently become
-# the other.
+# 10K for the same question. Three roles, three settings, and none of them can
+# silently become another.
 #
-#   AGENT    live. A person is waiting. Chooses tools, writes the answer.
-#            Speed matters. The system prompt is tuned for this model specifically.
+#   AGENT    live. A person is waiting. This is the REASONER: it chooses tools, reads
+#            what came back, and decides which films answer the question. It writes no
+#            prose. Speed matters, because the loop may go round more than once.
+#
+#   WRITER   live. Turns the reasoner's decision into sentences. Chooses nothing, calls
+#            no tool, runs exactly once. Only the VOICE matters here.
 #
 #   DERIVE   build time. Nobody is waiting. Writes each film's mood, theme and
 #            premise, once, into the database. Only quality matters here.
@@ -58,6 +62,18 @@ DERIVE_MODEL_VERTEX = os.environ.get("VERTEX_MODEL_DERIVE", "gemini-2.5-pro")
 # AGENT_MODEL, so a glance at the page answers "which model wrote this?".
 AGENT_MODEL = AGENT_MODEL_VERTEX if AGENT_PROVIDER == "vertex" else AGENT_MODEL_BEDROCK
 DERIVE_MODEL = DERIVE_MODEL_VERTEX if DERIVE_PROVIDER == "vertex" else DERIVE_MODEL_BEDROCK
+
+# ─── The writer ───────────────────────────────────────────────────────────────
+# It DEFAULTS TO THE AGENT'S OWN MODEL, so today one model does both jobs and nothing
+# about the deployment changed. That is the point: the split being built here is a
+# SEAM, not a model choice. The seam is worth having on its own — the reasoner stops
+# being asked to think and perform in one breath — and the day a fine-tuned writer
+# exists, WRITER_PROVIDER is the only line that moves.
+WRITER_PROVIDER = os.environ.get("WRITER_PROVIDER", AGENT_PROVIDER)
+WRITER_MODEL_BEDROCK = os.environ.get("BEDROCK_MODEL_WRITER", AGENT_MODEL_BEDROCK)
+WRITER_MODEL_VERTEX = os.environ.get("VERTEX_MODEL_WRITER", AGENT_MODEL_VERTEX)
+WRITER_MODEL = (WRITER_MODEL_VERTEX if WRITER_PROVIDER == "vertex"
+                else WRITER_MODEL_BEDROCK)
 
 # Vertex only. No key: credentials come from Application Default Credentials, written
 # outside this project by `gcloud auth application-default login`.

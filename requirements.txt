@@ -73,7 +73,6 @@ mdurl==0.1.2
 multidict==6.7.1
 multiprocess==0.70.19
 mypy_extensions==1.1.0
-neo4j==6.2.0
 nest-asyncio==1.6.0
 networkx==3.6.1
 numexpr==2.14.2
@@ -99,6 +98,7 @@ pydantic-settings==2.15.0
 pydantic_core==2.46.4
 Pygments==2.21.0
 pytest==8.4.2
+ruff==0.15.11
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 pytz==2026.3.post1

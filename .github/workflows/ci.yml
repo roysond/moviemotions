@@ -10,10 +10,10 @@
 #   A workflow with your AWS keys in it is a workflow that can leak them, and a
 #   pull request from a fork would be able to read them.
 #
-#   So CI checks STRUCTURE — does it parse, is everything declared, did a secret
-#   slip in, does the documentation point at real files. BEHAVIOUR is checked by
-#   eval_variants.py and eval_agent.py, which you run on your own machine where
-#   the credentials already live.
+#   So CI checks STRUCTURE — does it parse, is everything declared, is it linted,
+#   did a secret slip in, does the documentation point at real files. BEHAVIOUR is
+#   checked by evals/eval_agent.py, which you run on your own machine where the
+#   credentials already live.
 #
 #   Two jobs, two different questions. Do not merge them.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +93,8 @@ jobs:
   # that must agree about edge types were, until now, verified by nobody.
   #
   # These tests never open a socket. tests/conftest.py plants placeholder values for
-  # the variables core.py reads at import time, so no credential is needed or wanted.
+  # the variables backend/config.py reads at import time, so no credential is needed
+  # or wanted.
   tests:
     name: Unit tests
     runs-on: ubuntu-latest
@@ -111,6 +112,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Lint
+        # Style is not taste once it is a gate. ruff's config lives in pyproject.toml;
+        # the repository was brought to zero findings on 13 Sep before this line was
+        # added, because a gate switched on over a red codebase teaches people to
+        # ignore it.
+        run: ruff check .
 
       - name: Run the tests
         run: python -m pytest tests -q

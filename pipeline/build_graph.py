@@ -139,7 +139,7 @@ def status(conn):
     # A graph's value is entirely in what is SHARED — a person, genre or keyword
     # attached to exactly one film connects nothing and can answer no question.
     shared = conn.execute(SHARED).fetchall()
-    print(f"\nthings connecting more than one film — this is where a graph earns its keep")
+    print("\nthings connecting more than one film — this is where a graph earns its keep")
     if not shared:
         print("  none. Every node touches one film, so the graph connects nothing yet.")
     for node_type, name, films in shared:

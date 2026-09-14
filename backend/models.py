@@ -21,7 +21,7 @@ from botocore.config import Config
 from backend.config import (AGENT_MODEL, AGENT_PROVIDER, DERIVE_MODEL,
                             DERIVE_PROVIDER, DIMENSIONS, GCP_LOCATION, GCP_PROJECT,
                             MODEL_ID, OPENROUTER_API_KEY, REGION, RERANK_MODEL,
-                            RERANK_URL)
+                            RERANK_URL, WRITER_MODEL, WRITER_PROVIDER)
 from backend.tracing import traceable
 
 _bedrock = boto3.client(
@@ -157,8 +157,23 @@ def _chat(provider, model, role):
 
 
 def chat_model():
-    """The AGENT's model. Live, a person is waiting, tuned prompt."""
+    """The REASONER's model. Live, a person is waiting, tuned prompt.
+
+    Still named chat_model() because the reasoner IS the agent — the loop that picks
+    tools and decides when it has enough. What changed is that it no longer writes the
+    answer; writer_model() does that.
+    """
     return _chat(AGENT_PROVIDER, AGENT_MODEL, "AGENT_PROVIDER")
+
+
+def writer_model():
+    """The WRITER's model. Says what the reasoner decided, and decides nothing.
+
+    Defaults to the same model the reasoner uses, so this function exists before there
+    is any difference to point it at. That is deliberate: a seam is cheap to build now
+    and expensive to retrofit around a model that is already in production.
+    """
+    return _chat(WRITER_PROVIDER, WRITER_MODEL, "WRITER_PROVIDER")
 
 
 def derive_model():

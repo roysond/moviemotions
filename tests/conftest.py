@@ -1,7 +1,7 @@
 """Shared setup for every test.
 
 WHY THIS FILE EXISTS AT ALL
-    core.py and agent.py read os.environ["..."] at IMPORT time. That is a good choice
+    config.py and agent.py read os.environ["..."] at IMPORT time. That is a good choice
     in an application: it fails loudly on a misconfigured machine instead of halfway
     through a run. It is awkward in a test, because merely importing the module demands
     credentials that CI must never hold.
@@ -19,16 +19,21 @@ WHY THE LIST IS SCANNED AND NOT TYPED OUT
     copies drift. So this reads the code and derives the list. Add a new required
     variable tomorrow and this keeps working with no edit here.
 
-    Same principle as REGION living only in providers.py: one definition, no drift.
+    Same principle as REGION living only in backend/config.py: one definition, no
+    drift.
+
+WHERE THE IMPORT PATH COMES FROM
+    Not from here any more. `pythonpath = ["."]` in pyproject.toml does it, which is
+    the configured way and applies however pytest is started. This file used to do
+    `sys.path.insert(0, ROOT)`, which worked only because pytest happened to import
+    it first.
 """
 
 import os
 import pathlib
 import re
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))          # so `import backend...` works from the root
 
 # Values that must look real enough for a library to accept them at import time.
 # Everything else gets a plainly fake string, so a placeholder can never be mistaken
