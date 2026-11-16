@@ -395,11 +395,6 @@ python -m scripts.repo_check        # the same structural checks CI runs — run
 | **Unit tests** | Is the wiring right? An empty model reply is refused at the door, the result panel shows only films the agent actually named, `requirements-runtime.txt` covers every `backend/` import, and nothing outside `backend/models.py` names a vendor |
 | **Front end builds** | Do `backend/api.py` and the React app still agree about their data? `npm run build` runs `tsc --noEmit` first, so a mismatch fails the pull request rather than the browser |
 
-A fifth workflow, `.github/workflows/staleness.yml`, runs **on a schedule** rather than on a change:
-it reads the date stamped in the pricing layer and opens an issue when prices pass 30 days old.
-Nothing in a repository changes when Apple raises a price — only the calendar knows. *(Idle while
-the pricing layer is being rebuilt.)*
-
 **CI holds no credentials and never will.** A workflow with your AWS keys is a workflow
 that can leak them, and a pull request from a fork could read them.
 
